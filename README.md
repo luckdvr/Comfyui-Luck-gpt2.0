@@ -27,6 +27,50 @@ python3 -m pip install -r requirements.txt
    - `url`: returns and downloads the R2 CDN image URL.
    - `b64_json`: decodes the API base64 data URL directly.
 
+## API Calls
+
+This node uses APIYi OpenAI-compatible image endpoints:
+
+- Text-to-image: `POST https://api.apiyi.com/v1/images/generations`
+- Image edit / multi-image fusion: `POST https://api.apiyi.com/v1/images/edits`
+- Backup gateways: `https://vip.apiyi.com/v1` and `https://b.apiyi.com/v1`
+
+Authentication:
+
+```text
+Authorization: Bearer YOUR_API_KEY
+```
+
+Text-to-image JSON body:
+
+```json
+{
+  "model": "gpt-image-2-all",
+  "prompt": "横版 16:9 电影画幅，黄昏时的海边老灯塔",
+  "response_format": "url"
+}
+```
+
+Image edit / fusion form body:
+
+```text
+model=gpt-image-2-all
+prompt=把图1的人物放进图2的场景，参考图3的画风
+response_format=url
+image[]=ref1.png
+image[]=ref2.png
+image[]=ref3.png
+```
+
+Allowed request fields for `gpt-image-2-all` are only:
+
+- `model`
+- `prompt`
+- `response_format`
+- repeated `image[]` in edit mode
+
+Do not send `size`, `n`, `quality`, or `aspect_ratio`; the API may reject those fields. This node keeps size and aspect controls in the UI, then writes them into the prompt prefix.
+
 ## Size And Aspect Prompt Mapping
 
 | Aspect | AUTO size prompt | 1K | 2K | 4K |
@@ -44,6 +88,19 @@ python3 -m pip install -r requirements.txt
 - `seed (种子)` is a ComfyUI UI control only and is not sent to the API.
 - `timeout_seconds (超时秒数)` defaults to 120 seconds, matching the API recommendation.
 - Share workflows only after clearing your API key.
+
+## Troubleshooting
+
+If ComfyUI reports:
+
+```text
+Value 3 smaller than min of 30
+timeout_seconds (超时秒数)
+```
+
+you are loading an older workflow where the seed control value is missing. The widget values after `seed` shift left, so `retry_times=3` is incorrectly read as `timeout_seconds=3`.
+
+Fix: use the updated `example_workflow.json`, or open the node and set `timeout_seconds (超时秒数)` back to `120` and `retry_times (重试次数)` to `3`.
 
 ## Example Workflow
 
