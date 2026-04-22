@@ -26,10 +26,10 @@ API_BASE_URLS = [
 
 
 AUTO_RATIO_PROMPTS = {
-    "1:1": "1024×1024 方图 / 1:1 方形构图",
-    "16:9": "横版 16:9 / 宽屏 16:9 电影画幅",
-    "9:16": "竖版 9:16 / 手机海报 9:16",
-    "21:9": "横幅 21:9 超宽银幕",
+    "1:1": "1024x1024 方图，1:1 方形构图",
+    "16:9": "横版 16:9，宽屏 16:9 电影画幅",
+    "9:16": "竖版 9:16，手机海报 9:16",
+    "21:9": "横幅 21:9，超宽银幕",
     "4:3": "4:3 标准画幅",
     "3:2": "3:2 经典画幅",
 }
@@ -37,28 +37,28 @@ AUTO_RATIO_PROMPTS = {
 
 SIZE_RATIO_PROMPTS = {
     "1K": {
-        "1:1": "1024×1024 方图 / 1:1 方形构图",
-        "16:9": "1024×576 横版 / 宽屏 16:9 电影画幅",
-        "9:16": "576×1024 竖版 / 手机海报 9:16",
-        "21:9": "1344×576 横幅 / 21:9 超宽银幕",
-        "4:3": "1024×768 标准画幅 / 4:3 构图",
-        "3:2": "1152×768 经典画幅 / 3:2 构图",
+        "1:1": "1024x1024 方图，1:1 方形构图",
+        "16:9": "1024x576 横版，宽屏 16:9 电影画幅",
+        "9:16": "576x1024 竖版，手机海报 9:16",
+        "21:9": "1344x576 横幅，21:9 超宽银幕",
+        "4:3": "1024x768 标准画幅，4:3 构图",
+        "3:2": "1152x768 经典画幅，3:2 构图",
     },
     "2K": {
-        "1:1": "2048×2048 方图 / 1:1 方形构图",
-        "16:9": "1920×1080 横版 / 宽屏 16:9 电影画幅",
-        "9:16": "1080×1920 竖版 / 手机海报 9:16",
-        "21:9": "2560×1080 横幅 / 21:9 超宽银幕",
-        "4:3": "2048×1536 标准画幅 / 4:3 构图",
-        "3:2": "2160×1440 经典画幅 / 3:2 构图",
+        "1:1": "2048x2048 方图，1:1 方形构图",
+        "16:9": "1920x1080 横版，宽屏 16:9 电影画幅",
+        "9:16": "1080x1920 竖版，手机海报 9:16",
+        "21:9": "2560x1080 横幅，21:9 超宽银幕",
+        "4:3": "2048x1536 标准画幅，4:3 构图",
+        "3:2": "2160x1440 经典画幅，3:2 构图",
     },
     "4K": {
-        "1:1": "4096×4096 方图 / 1:1 方形构图",
-        "16:9": "3840×2160 横版 / 4K 16:9 电影画幅",
-        "9:16": "2160×3840 竖版 / 4K 手机海报 9:16",
-        "21:9": "5120×2160 横幅 / 21:9 超宽银幕",
-        "4:3": "4096×3072 标准画幅 / 4:3 构图",
-        "3:2": "4320×2880 经典画幅 / 3:2 构图",
+        "1:1": "4096x4096 方图，1:1 方形构图",
+        "16:9": "3840x2160 横版，4K 16:9 电影画幅",
+        "9:16": "2160x3840 竖版，4K 手机海报 9:16",
+        "21:9": "5120x2160 横幅，21:9 超宽银幕",
+        "4:3": "4096x3072 标准画幅，4:3 构图",
+        "3:2": "4320x2880 经典画幅，3:2 构图",
     },
 }
 
@@ -68,6 +68,12 @@ SIZE_ONLY_PROMPTS = {
     "2K": "2K 高清图片",
     "4K": "4K 超高清图片",
 }
+
+
+CONTROL_PREFIX_TEMPLATE = (
+    "【画幅与尺寸要求】{phrase}。请严格按这个尺寸倾向和画幅比例构图，"
+    "不要生成其他比例；这只是生成控制指令，不要把这些文字写进画面。"
+)
 
 
 def tensor_to_png_bytes(tensor):
@@ -181,14 +187,16 @@ class ComfyuiLuckGPT20Node:
     CATEGORY = "Comfyui-Luck/gpt-2.0"
 
     def _prompt_prefix(self, image_size, aspect_ratio):
+        phrase = ""
         if image_size != "AUTO" and aspect_ratio != "AUTO":
-            return SIZE_RATIO_PROMPTS.get(image_size, {}).get(aspect_ratio, "")
+            phrase = SIZE_RATIO_PROMPTS.get(image_size, {}).get(aspect_ratio, "")
+        elif aspect_ratio != "AUTO":
+            phrase = AUTO_RATIO_PROMPTS.get(aspect_ratio, "")
+        elif image_size != "AUTO":
+            phrase = SIZE_ONLY_PROMPTS.get(image_size, "")
 
-        if aspect_ratio != "AUTO":
-            return AUTO_RATIO_PROMPTS.get(aspect_ratio, "")
-
-        if image_size != "AUTO":
-            return SIZE_ONLY_PROMPTS.get(image_size, "")
+        if phrase:
+            return CONTROL_PREFIX_TEMPLATE.format(phrase=phrase)
 
         return ""
 
@@ -200,7 +208,7 @@ class ComfyuiLuckGPT20Node:
             raise ValueError("prompt 不能为空")
 
         if prefix and clean_prompt:
-            return f"{prefix}，{clean_prompt}", prefix
+            return f"{prefix}\n\n{clean_prompt}", prefix
         if prefix:
             return prefix, prefix
         return clean_prompt, ""
@@ -302,6 +310,7 @@ class ComfyuiLuckGPT20Node:
 
         effective_prompt, prompt_prefix = self._compose_prompt(prompt, image_size, aspect_ratio)
         image_payloads = self._collect_images(kwargs)
+        print(f"[Comfyui-Luck gpt-2.0] effective prompt: {effective_prompt[:500]}")
 
         if mode == "AUTO":
             actual_mode = "img2img" if image_payloads else "text2img"

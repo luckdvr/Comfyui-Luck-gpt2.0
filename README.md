@@ -22,7 +22,7 @@ python3 -m pip install -r requirements.txt
 3. Keep `mode (模式)` as `AUTO` for normal use:
    - No image input: text-to-image.
    - Any `image_01` to `image_14` input: image editing or multi-image fusion.
-4. Choose `image_size (分辨率)` and `aspect_ratio (宽高比)`. The node writes the matching size/aspect phrase at the beginning of the prompt.
+4. Choose `image_size (分辨率)` and `aspect_ratio (宽高比)`. The node writes a strong size/aspect control block at the beginning of the prompt.
 5. Use `response_format (响应格式)`:
    - `url`: returns and downloads the R2 CDN image URL.
    - `b64_json`: decodes the API base64 data URL directly.
@@ -70,6 +70,16 @@ Allowed request fields for `gpt-image-2-all` are only:
 - repeated `image[]` in edit mode
 
 Do not send `size`, `n`, `quality`, or `aspect_ratio`; the API may reject those fields. This node keeps size and aspect controls in the UI, then writes them into the prompt prefix.
+
+The actual prompt sent to the API starts like this when `image_size=2K` and `aspect_ratio=16:9`:
+
+```text
+【画幅与尺寸要求】1920x1080 横版，宽屏 16:9 电影画幅。请严格按这个尺寸倾向和画幅比例构图，不要生成其他比例；这只是生成控制指令，不要把这些文字写进画面。
+
+你的原始提示词...
+```
+
+Because the API does not expose a real `size` field for `gpt-image-2-all`, this is prompt-based control. It improves compliance, but the remote model can still occasionally return a nearby adaptive size.
 
 ## Size And Aspect Prompt Mapping
 
