@@ -1,0 +1,116 @@
+{
+  "last_node_id": 5,
+  "last_link_id": 1,
+  "nodes": [
+    {
+      "id": 1,
+      "type": "ComfyuiLuckGPT20Node",
+      "pos": [420, 180],
+      "size": [520, 560],
+      "flags": {},
+      "order": 0,
+      "mode": 0,
+      "inputs": [],
+      "outputs": [
+        {
+          "name": "image",
+          "type": "IMAGE",
+          "links": [1],
+          "slot_index": 0
+        },
+        {
+          "name": "response",
+          "type": "STRING",
+          "links": null,
+          "slot_index": 1
+        },
+        {
+          "name": "image_urls",
+          "type": "STRING",
+          "links": null,
+          "slot_index": 2
+        }
+      ],
+      "properties": {
+        "Node name for S&R": "ComfyuiLuckGPT20Node"
+      },
+      "widgets_values": [
+        "",
+        "一张中文电影海报，标题文字写“未来之城”，霓虹灯街道，雨夜反光，人物站在画面中央，文字清晰可读，写实电影质感",
+        "AUTO",
+        "gpt-image-2-all",
+        "https://api.apiyi.com",
+        "2K",
+        "16:9",
+        "url",
+        0,
+        120,
+        3
+      ]
+    },
+    {
+      "id": 2,
+      "type": "PreviewImage",
+      "pos": [1000, 180],
+      "size": [360, 360],
+      "flags": {},
+      "order": 1,
+      "mode": 0,
+      "inputs": [
+        {
+          "name": "images",
+          "type": "IMAGE",
+          "link": 1
+        }
+      ],
+      "outputs": [],
+      "properties": {}
+    },
+    {
+      "id": 3,
+      "type": "Note",
+      "pos": [40, 60],
+      "size": [330, 320],
+      "flags": {},
+      "order": 2,
+      "mode": 0,
+      "properties": {},
+      "widgets_values": [
+        "【Comfyui-Luck gpt-2.0 使用说明】\n\n1. 把 APIYi API Key 填进 api_key。\n2. prompt 写文生图描述或改图/融合指令。\n3. mode 默认 AUTO：\n   - 不接图片：自动文生图\n   - 接 image_01~image_14：自动改图/多图融合\n4. response_format：\n   - url：返回并下载 CDN 图片\n   - b64_json：直接解析 base64 图片\n5. 分享工作流前请清空 API Key。"
+      ]
+    },
+    {
+      "id": 4,
+      "type": "Note",
+      "pos": [40, 420],
+      "size": [330, 260],
+      "flags": {},
+      "order": 3,
+      "mode": 0,
+      "properties": {},
+      "widgets_values": [
+        "【尺寸与比例控制】\n\n这个模型没有 size / quality / n / aspect_ratio API 参数。\n节点不会传这些字段，只会把面板选择写进 prompt 开头。\n\n推荐：\n- 方形：1024×1024 方图 / 1:1 方形构图\n- 横版：横版 16:9 / 宽屏 16:9 电影画幅\n- 竖版：竖版 9:16 / 手机海报 9:16\n- 超宽：横幅 21:9 超宽银幕\n- 印刷：4:3 标准画幅 / 3:2 经典画幅"
+      ]
+    },
+    {
+      "id": 5,
+      "type": "Note",
+      "pos": [1000, 580],
+      "size": [360, 230],
+      "flags": {},
+      "order": 4,
+      "mode": 0,
+      "properties": {},
+      "widgets_values": [
+        "【图片编辑 / 多图融合】\n\n连接参考图到 image_01、image_02、image_03...\n\n多图时顺序有意义，可以在 prompt 里这样写：\n“把图1的人物放进图2的场景，参考图3的画风。”\n\n单图改图示例：\n“保持人物不变，把背景换成海边黄昏，整体更像电影海报。”\n\n建议 timeout_seconds 至少 120。"
+      ]
+    }
+  ],
+  "links": [
+    [1, 1, 0, 2, 0, "IMAGE"]
+  ],
+  "groups": [],
+  "config": {},
+  "extra": {},
+  "version": 0.4
+}
