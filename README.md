@@ -1,117 +1,132 @@
 # Comfyui-Luck gpt-2.0
 
-ComfyUI custom node for APIYi `gpt-image-2-all`.
+API易 GPT 图像模型的 ComfyUI 自定义节点包，当前包含两个独立节点：
 
-`Comfyui-Luck gpt-2.0` supports text-to-image, single image editing, multi-image fusion, and natural-language image editing. The model does not accept `size`, `n`, `quality`, or `aspect_ratio` API fields, so this node converts size and aspect controls into a prompt prefix.
+| 节点 | 模型 | 适合场景 | 尺寸控制 |
+|---|---|---|---|
+| `Comfyui-Luck gpt-2.0 all` | `gpt-image-2-all` | 便宜、快、中文友好、文生图/改图/多图融合 | 只能把比例写进 prompt |
+| `Comfyui-Luck gpt-image-2` | `gpt-image-2` | 需要真实 size、2K/4K、自定义尺寸、quality、mask | 真正传 `size` API 参数 |
 
-## Install
+## 安装
 
-1. Put this folder into ComfyUI `custom_nodes`.
-2. Install dependencies:
+1. 把整个目录复制到 ComfyUI 的 `custom_nodes` 目录。
+2. 安装依赖：
 
 ```bash
 python3 -m pip install -r requirements.txt
 ```
 
-3. Restart ComfyUI and search for `Comfyui-Luck gpt-2.0`.
+3. 重启 ComfyUI，搜索 `Comfyui-Luck`。
 
-## Usage
+## 节点 1：Comfyui-Luck gpt-2.0 all
 
-1. Fill `api_key (API密钥)` with your APIYi key.
-2. Write the generation or editing instruction in `prompt (提示词)`.
-3. Keep `mode (模式)` as `AUTO` for normal use:
-   - No image input: text-to-image.
-   - Any `image_01` to `image_14` input: image editing or multi-image fusion.
-4. Choose `image_size (分辨率)` and `aspect_ratio (宽高比)`. The node writes a strong size/aspect control block at the beginning of the prompt.
-5. Use `response_format (响应格式)`:
-   - `url`: returns and downloads the R2 CDN image URL.
-   - `b64_json`: decodes the API base64 data URL directly.
+使用 `gpt-image-2-all`。
 
-## API Calls
+特点：
 
-This node uses APIYi OpenAI-compatible image endpoints:
+- 统一按次计费，约 `$0.03/张`。
+- 支持文生图、单图改图、多图融合、自然语言改图。
+- 默认走 API易主推的 `POST /v1/chat/completions`，提示词遵循更好。
+- 可切到 `images_api (兼容)`，走 `/v1/images/generations` 或 `/v1/images/edits`。
+- 不支持真实 `size`、`quality`、`n`、`aspect_ratio` API 字段，节点不会发送这些字段。
 
-- Text-to-image: `POST https://api.apiyi.com/v1/images/generations`
-- Image edit / multi-image fusion: `POST https://api.apiyi.com/v1/images/edits`
-- Backup gateways: `https://vip.apiyi.com/v1` and `https://b.apiyi.com/v1`
+比例控制只做很短的 prompt 前置，不加额外噪音：
 
-Authentication:
+| 需求 | 前置写法 |
+|---|---|
+| 方形 | `1024×1024 方图 / 1:1 方形构图` |
+| 横版 | `横版 16:9 / 宽屏 16:9 电影画幅` |
+| 竖版 | `竖版 9:16 / 手机海报 9:16` |
+| 超宽横幅 | `横幅 21:9 超宽银幕` |
+| 经典印刷 | `4:3 标准画幅` 或 `3:2 经典画幅` |
+
+说明：
+
+- 这是提示词控制，不是硬尺寸控制。
+- `response_format` 只在 `images_api (兼容)` 端点里发送。
+- 默认 `chat_completions (推荐)` 端点会从 `choices[0].message.content` 里提取图片 URL 或 data URL。
+- URL 输出通常是临时 CDN 链接，约 1 天有效；需要长期保存时请尽快转存。
+- 推荐超时：`300` 秒。
+
+## 节点 2：Comfyui-Luck gpt-image-2
+
+使用官方契约的 `gpt-image-2`。
+
+特点：
+
+- 真正传 `size` 参数，可控 1K / 2K / 4K / custom。
+- `quality`：`auto`、`low`、`medium`、`high`。
+- `output_format`：`png`、`jpeg`、`webp`。
+- `output_compression`：`jpeg` / `webp` 时可用，范围 0-100。
+- `background`：`auto` 或 `opaque`，不提供 `transparent`，避免 API 报错。
+- 支持最多 5 张参考图。
+- 支持可选 `mask` 局部重绘，透明区域 = 要重绘，不透明区域 = 保留。
+
+预设尺寸：
+
+| size | 含义 |
+|---|---|
+| `auto` | 模型自适应 |
+| `1024x1024` | 1K 方形 |
+| `1536x1024` | 1K 横版 3:2 |
+| `1024x1536` | 1K 竖版 2:3 |
+| `2048x2048` | 2K 方形 |
+| `2048x1152` | 2K 横版 16:9 |
+| `3840x2160` | 4K 横版 16:9 |
+| `2160x3840` | 4K 竖版 9:16 |
+| `custom` | 使用 `custom_size` |
+
+`custom_size` 必须同时满足：
+
+- 最大边 <= 3840px。
+- 宽和高都是 16 的倍数。
+- 长边/短边 <= 3:1。
+- 总像素在 655,360 到 8,294,400 之间。
+
+说明：
+
+- `gpt-image-2` 返回的 `b64_json` 是纯 base64，不带 `data:image/...;base64,` 前缀；节点会自动解码成 ComfyUI 图片。
+- 节点不会发送 `input_fidelity`。
+- 节点不提供 `background=transparent`。
+- `moderation` 只在文生图请求里发送，编辑请求不发送，减少参数校验风险。
+- 推荐超时：`360` 秒。
+
+## API 域名
+
+可选域名：
+
+- 主域名：`https://api.apiyi.com`
+- 备用：`https://vip.apiyi.com`
+- 备用：`https://b.apiyi.com`
+
+鉴权格式：
 
 ```text
 Authorization: Bearer YOUR_API_KEY
 ```
 
-Text-to-image JSON body:
+## 示例工作流
 
-```json
-{
-  "model": "gpt-image-2-all",
-  "prompt": "横版 16:9 电影画幅，黄昏时的海边老灯塔",
-  "response_format": "url"
-}
-```
+打开 `example_workflow.json`。
 
-Image edit / fusion form body:
+里面包含：
 
-```text
-model=gpt-image-2-all
-prompt=把图1的人物放进图2的场景，参考图3的画风
-response_format=url
-image[]=ref1.png
-image[]=ref2.png
-image[]=ref3.png
-```
+- 一个 `gpt-image-2-all` 示例，默认使用推荐的 chat/completions 端点。
+- 一个 `gpt-image-2` 示例，使用真实 `size=2048x1152`、`quality=high`、`output_format=jpeg`。
+- 中文 Note 节点，说明两个渠道怎么选、比例前置写法、真实尺寸控制和图片编辑/mask 用法。
 
-Allowed request fields for `gpt-image-2-all` are only:
+分享工作流前请清空 API Key。
 
-- `model`
-- `prompt`
-- `response_format`
-- repeated `image[]` in edit mode
+## 常见问题
 
-Do not send `size`, `n`, `quality`, or `aspect_ratio`; the API may reject those fields. This node keeps size and aspect controls in the UI, then writes them into the prompt prefix.
+### gpt-image-2-all 能不能硬控 2K / 4K？
 
-The actual prompt sent to the API starts like this when `image_size=2K` and `aspect_ratio=16:9`:
+不能。`gpt-image-2-all` 没有 `size` 参数，2K / 4K 只能作为 prompt 描述，无法保证输出像素。当前节点按你的要求只前置官方推荐比例写法，不再额外加入噪音尺寸描述。
 
-```text
-【画幅与尺寸要求】1920x1080 横版，宽屏 16:9 电影画幅。请严格按这个尺寸倾向和画幅比例构图，不要生成其他比例；这只是生成控制指令，不要把这些文字写进画面。
+### 哪个节点能真实控制分辨率？
 
-你的原始提示词...
-```
+用 `Comfyui-Luck gpt-image-2`。它会真正向 API 传 `size`，例如 `2048x1152`、`3840x2160` 或合法的 `custom_size`。
 
-Because the API does not expose a real `size` field for `gpt-image-2-all`, this is prompt-based control. It improves compliance, but the remote model can still occasionally return a nearby adaptive size.
+### 加载旧工作流报 `Value 3 smaller than min of 30`？
 
-## Size And Aspect Prompt Mapping
-
-| Aspect | AUTO size prompt | 1K | 2K | 4K |
-|---|---|---|---|---|
-| 1:1 | 1024x1024 square / 1:1 | 1024x1024 | 2048x2048 | 4096x4096 |
-| 16:9 | widescreen 16:9 cinematic | 1024x576 | 1920x1080 | 3840x2160 |
-| 9:16 | vertical 9:16 phone poster | 576x1024 | 1080x1920 | 2160x3840 |
-| 21:9 | ultra-wide 21:9 banner | 1344x576 | 2560x1080 | 5120x2160 |
-| 4:3 | 4:3 standard frame | 1024x768 | 2048x1536 | 4096x3072 |
-| 3:2 | 3:2 classic frame | 1152x768 | 2160x1440 | 4320x2880 |
-
-## Notes
-
-- The node sends only allowed API fields: `model`, `prompt`, `response_format`, and repeated `image[]` for edit mode.
-- `seed (种子)` is a ComfyUI UI control only and is not sent to the API.
-- `timeout_seconds (超时秒数)` defaults to 120 seconds, matching the API recommendation.
-- Share workflows only after clearing your API key.
-
-## Troubleshooting
-
-If ComfyUI reports:
-
-```text
-Value 3 smaller than min of 30
-timeout_seconds (超时秒数)
-```
-
-you are loading an older workflow where the seed control value is missing. The widget values after `seed` shift left, so `retry_times=3` is incorrectly read as `timeout_seconds=3`.
-
-Fix: use the updated `example_workflow.json`, or open the node and set `timeout_seconds (超时秒数)` back to `120` and `retry_times (重试次数)` to `3`.
-
-## Example Workflow
-
-Open `example_workflow.json` in this folder. It contains Note nodes with usage comments and a basic text-to-image example wired to `PreviewImage`.
+这是旧工作流 widget 顺序不匹配导致的：`retry_times=3` 被错读成了 `timeout_seconds=3`。请使用当前 `example_workflow.json`，或重新添加节点。

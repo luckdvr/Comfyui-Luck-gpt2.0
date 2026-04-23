@@ -1,6 +1,6 @@
 {
-  "last_node_id": 5,
-  "last_link_id": 1,
+  "last_node_id": 8,
+  "last_link_id": 2,
   "nodes": [
     {
       "id": 1,
@@ -40,12 +40,12 @@
         "AUTO",
         "gpt-image-2-all",
         "https://api.apiyi.com",
-        "2K",
+        "chat_completions (推荐)",
         "16:9",
         "url",
         0,
         "randomize",
-        120,
+        300,
         3
       ]
     },
@@ -77,7 +77,7 @@
       "mode": 0,
       "properties": {},
       "widgets_values": [
-        "【Comfyui-Luck gpt-2.0 使用说明】\n\n1. 把 APIYi API Key 填进 api_key。\n2. prompt 写文生图描述或改图/融合指令。\n3. mode 默认 AUTO：\n   - 不接图片：自动文生图\n   - 接 image_01~image_14：自动改图/多图融合\n4. response_format：\n   - url：返回并下载 CDN 图片\n   - b64_json：直接解析 base64 图片\n5. 分享工作流前请清空 API Key。"
+        "【两个节点怎么选】\n\n1. Comfyui-Luck gpt-2.0 all\n   - 模型：gpt-image-2-all\n   - 便宜快，约 $0.03/张\n   - 默认走 chat/completions 主推端点\n   - 不能硬控尺寸，只把画幅写进 prompt\n\n2. Comfyui-Luck gpt-image-2\n   - 模型：gpt-image-2\n   - 可真正传 size / quality\n   - 支持 2K / 4K / custom / mask\n   - 更贵更慢，timeout 建议 360 秒\n\n分享工作流前请清空 API Key。"
       ]
     },
     {
@@ -90,7 +90,7 @@
       "mode": 0,
       "properties": {},
       "widgets_values": [
-        "【尺寸与比例控制】\n\n这个模型没有真正的 size / quality / n / aspect_ratio API 参数。\n节点不会传这些字段，只会把面板选择强制写进 prompt 最前面。\n\n例如 2K + 16:9 会发送：\n【画幅与尺寸要求】1920x1080 横版，宽屏 16:9 电影画幅。请严格按这个尺寸倾向和画幅比例构图，不要生成其他比例；这只是生成控制指令，不要把这些文字写进画面。\n\n注意：这是提示词控制，不是 API 硬尺寸参数，模型偶尔仍可能返回接近尺寸。"
+        "【比例控制】\n\n这个模型没有真正的 size / quality / n / aspect_ratio API 参数。\n节点不会传这些字段，只会把 aspect_ratio 对应的推荐写法放在 prompt 最前面。\n\n推荐写法：\n- 方形：1024×1024 方图 / 1:1 方形构图\n- 横版：横版 16:9 / 宽屏 16:9 电影画幅\n- 竖版：竖版 9:16 / 手机海报 9:16\n- 超宽横幅：横幅 21:9 超宽银幕\n- 经典印刷：4:3 标准画幅 / 3:2 经典画幅\n\n注意：这是提示词控制，不是 API 硬尺寸参数。"
       ]
     },
     {
@@ -103,12 +103,89 @@
       "mode": 0,
       "properties": {},
       "widgets_values": [
-        "【图片编辑 / 多图融合】\n\n连接参考图到 image_01、image_02、image_03...\n\n多图时顺序有意义，可以在 prompt 里这样写：\n“把图1的人物放进图2的场景，参考图3的画风。”\n\n单图改图示例：\n“保持人物不变，把背景换成海边黄昏，整体更像电影海报。”\n\n建议 timeout_seconds 至少 120。"
+        "【图片编辑 / 多图融合】\n\nall 节点最多可接 image_01~image_14。\ngpt-image-2 官方节点最多可接 image_01~image_05，并可接 mask。\n\n多图时顺序有意义，可以在 prompt 里这样写：\n“把图1的人物放进图2的场景，参考图3的画风。”\n\nmask：透明区域 = 要重绘区域，仅对第一张 image 生效。"
+      ]
+    },
+    {
+      "id": 6,
+      "type": "ComfyuiLuckGPTImage2Node",
+      "pos": [420, 820],
+      "size": [520, 620],
+      "flags": {},
+      "order": 5,
+      "mode": 0,
+      "inputs": [],
+      "outputs": [
+        {
+          "name": "image",
+          "type": "IMAGE",
+          "links": [2],
+          "slot_index": 0
+        },
+        {
+          "name": "response",
+          "type": "STRING",
+          "links": null,
+          "slot_index": 1
+        }
+      ],
+      "properties": {
+        "Node name for S&R": "ComfyuiLuckGPTImage2Node"
+      },
+      "widgets_values": [
+        "",
+        "赛博朋克城市雨夜，霓虹招牌特写，电影画幅，文字清晰",
+        "AUTO",
+        "gpt-image-2",
+        "https://api.apiyi.com",
+        "2048x1152",
+        "",
+        "high",
+        "jpeg",
+        85,
+        "auto",
+        "auto",
+        0,
+        "randomize",
+        360,
+        2
+      ]
+    },
+    {
+      "id": 7,
+      "type": "PreviewImage",
+      "pos": [1000, 820],
+      "size": [360, 360],
+      "flags": {},
+      "order": 6,
+      "mode": 0,
+      "inputs": [
+        {
+          "name": "images",
+          "type": "IMAGE",
+          "link": 2
+        }
+      ],
+      "outputs": [],
+      "properties": {}
+    },
+    {
+      "id": 8,
+      "type": "Note",
+      "pos": [40, 720],
+      "size": [330, 270],
+      "flags": {},
+      "order": 7,
+      "mode": 0,
+      "properties": {},
+      "widgets_values": [
+        "【gpt-image-2 真尺寸控制】\n\n官方节点会真正传 size 参数。\n\n预设：\n- 1024x1024\n- 1536x1024 / 1024x1536\n- 2048x2048 / 2048x1152\n- 3840x2160 / 2160x3840\n\ncustom 约束：\n- 最大边 ≤ 3840\n- 宽高都是 16 的倍数\n- 长短边比例 ≤ 3:1\n- 总像素 0.65MP 到 8.3MP"
       ]
     }
   ],
   "links": [
-    [1, 1, 0, 2, 0, "IMAGE"]
+    [1, 1, 0, 2, 0, "IMAGE"],
+    [2, 6, 0, 7, 0, "IMAGE"]
   ],
   "groups": [],
   "config": {},
