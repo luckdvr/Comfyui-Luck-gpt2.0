@@ -178,7 +178,7 @@
       "mode": 0,
       "properties": {},
       "widgets_values": [
-        "【gpt-image-2 真尺寸控制】\n\n官方节点会真正传 size 参数。\n现在按 Nano 风格拆成两栏：\n- image_size：auto / 1K / 2K / 4K / custom\n- aspect_ratio：1:1 / 16:9 / 4:3 / 3:1 等\n\n例：image_size=2K + aspect_ratio=4:3，会发送 size=2048x1536。\n例：image_size=4K + aspect_ratio=3:1，会发送 size=3840x1280。\n\ncustom_size 只在选择 custom 时填写，格式如 1600x1200。约束：最大边≤3840，宽高16倍数，长边/短边≤3:1，总像素 0.65MP 到 8.3MP。"
+        "【gpt-image-2 真尺寸控制】\n\n官方节点会真正传 size 参数。\n现在按 Nano 风格拆成两栏：\n- image_size：auto / 1K / 2K / 4K / custom\n- aspect_ratio：AUTO、1:4、4:1、1:8、8:1、1:1、2:3、3:2、3:4、4:3、4:5、5:4、9:16、16:9、21:9\n\n例：image_size=2K + aspect_ratio=4:3，会发送 size=2048x1536。\n例：image_size=4K + aspect_ratio=16:9，会发送 size=3840x2160。\n\n注意：gpt-image-2 官方限制长边/短边≤3:1，所以 1:4、4:1、1:8、8:1 会自动收敛到合法边界，不会硬传非法比例。\n\ncustom_size 只在选择 custom 时填写，格式如 1600x1200。约束：最大边≤3840，宽高16倍数，长边/短边≤3:1，总像素 0.65MP 到 8.3MP。"
       ]
     }
   ],
