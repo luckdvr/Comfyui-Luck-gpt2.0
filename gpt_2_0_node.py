@@ -120,29 +120,47 @@ def extract_image_references(text):
     return unique_refs
 
 
-def normalize_size(size, custom_size=""):
-    if size != "custom":
-        return size
+def _validate_gpt_image2_size(size_value):
+    if size_value == "auto":
+        return size_value
 
-    custom = (custom_size or "").strip().lower().replace("×", "x")
-    if not re.fullmatch(r"\d{3,4}x\d{3,4}", custom):
-        raise ValueError("custom_size 必须类似 1600x1200，且宽高都是数字")
+    if not re.fullmatch(r"\d{3,4}x\d{3,4}", size_value):
+        raise ValueError("size 必须类似 1600x1200，且宽高都是数字")
 
-    width, height = [int(v) for v in custom.split("x")]
+    width, height = [int(v) for v in size_value.split("x")]
     max_side = max(width, height)
     min_side = min(width, height)
     total_pixels = width * height
 
     if width % 16 != 0 or height % 16 != 0:
-        raise ValueError("custom_size 的宽和高都必须是 16 的倍数")
+        raise ValueError("size 的宽和高都必须是 16 的倍数")
     if max_side > 3840:
-        raise ValueError("custom_size 最大边不能超过 3840px")
+        raise ValueError("size 最大边不能超过 3840px")
     if max_side / min_side > 3:
-        raise ValueError("custom_size 长短边比例不能超过 3:1")
+        raise ValueError("size 长边/短边不能超过 3:1，因此 3:1 和 1:3 可以，超过不行")
     if total_pixels < 655360 or total_pixels > 8294400:
-        raise ValueError("custom_size 总像素需在 655,360 到 8,294,400 之间")
+        raise ValueError("size 总像素需在 655,360 到 8,294,400 之间")
 
-    return custom
+    return f"{width}x{height}"
+
+
+def normalize_size(size, custom_size=""):
+    option = (size or "auto").strip().lower().replace("×", "x")
+
+    if option.startswith("auto"):
+        return "auto"
+
+    if option.startswith("custom"):
+        custom = (custom_size or "").strip().lower().replace("×", "x")
+        if not custom:
+            raise ValueError("选择 custom 时，custom_size 必须填写，例如 3072x1024 或 1024x3072")
+        return _validate_gpt_image2_size(custom)
+
+    match = re.match(r"(\d{3,4}x\d{3,4})", option)
+    if match:
+        return _validate_gpt_image2_size(match.group(1))
+
+    raise ValueError(f"无法识别 size 选项: {size}")
 
 
 def emit_runtime_status(
@@ -546,15 +564,17 @@ class ComfyuiLuckGPTImage2Node:
 
     MODELS = ["gpt-image-2"]
     SIZES = [
-        "auto",
-        "1024x1024",
-        "1536x1024",
-        "1024x1536",
-        "2048x2048",
-        "2048x1152",
-        "3840x2160",
-        "2160x3840",
-        "custom",
+        "auto (自动)",
+        "1024x1024 (1:1 方形)",
+        "1536x1024 (3:2 横版)",
+        "1024x1536 (2:3 竖版)",
+        "2048x2048 (1:1 2K 方形)",
+        "2048x1152 (16:9 2K 横版)",
+        "3840x2160 (16:9 4K 横版, 实验)",
+        "2160x3840 (9:16 4K 竖版, 实验)",
+        "3072x1024 (3:1 超宽, 合法边界)",
+        "1024x3072 (1:3 长竖, 合法边界)",
+        "custom (自定义宽x高)",
     ]
 
     @classmethod
@@ -566,8 +586,8 @@ class ComfyuiLuckGPTImage2Node:
                 "mode (模式)": (["AUTO", "text2img", "img2img"], {"default": "AUTO"}),
                 "model (模型)": (cls.MODELS, {"default": "gpt-image-2"}),
                 "api_base (接口域名)": (API_BASE_URLS, {"default": "https://api.apiyi.com"}),
-                "size (尺寸)": (cls.SIZES, {"default": "2048x1152"}),
-                "custom_size (自定义尺寸)": ("STRING", {"default": "", "multiline": False}),
+                "size_ratio (尺寸/比例)": (cls.SIZES, {"default": "2048x1152 (16:9 2K 横版)"}),
+                "custom_size (custom时: 宽x高, 例3072x1024)": ("STRING", {"default": "", "multiline": False}),
                 "quality (画质)": (["auto", "low", "medium", "high"], {"default": "auto"}),
                 "output_format (输出格式)": (["png", "jpeg", "webp"], {"default": "png"}),
                 "output_compression (压缩率)": ("INT", {"default": 85, "min": 0, "max": 100}),
@@ -676,8 +696,11 @@ class ComfyuiLuckGPTImage2Node:
         mode = kwargs.get("mode (模式)", "AUTO")
         model = kwargs.get("model (模型)", "gpt-image-2")
         api_base = kwargs.get("api_base (接口域名)", "https://api.apiyi.com").rstrip("/")
-        size = kwargs.get("size (尺寸)", "2048x1152")
-        custom_size = kwargs.get("custom_size (自定义尺寸)", "")
+        size = kwargs.get("size_ratio (尺寸/比例)", kwargs.get("size (尺寸)", "2048x1152 (16:9 2K 横版)"))
+        custom_size = kwargs.get(
+            "custom_size (custom时: 宽x高, 例3072x1024)",
+            kwargs.get("custom_size (自定义尺寸)", ""),
+        )
         quality = kwargs.get("quality (画质)", "auto")
         output_format = kwargs.get("output_format (输出格式)", "png")
         output_compression = kwargs.get("output_compression (压缩率)", 85)
@@ -769,6 +792,7 @@ class ComfyuiLuckGPTImage2Node:
                     "model": model,
                     "mode": actual_mode,
                     "api_base": api_base,
+                    "size_option": size,
                     "request_fields": fields,
                     "input_images": len(image_payloads),
                     "mask": mask_bytes is not None,
