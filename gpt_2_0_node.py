@@ -37,6 +37,49 @@ AUTO_RATIO_PROMPTS = {
 }
 
 
+GPT_IMAGE2_SIZE_TABLE = {
+    "1K": {
+        "1:1": "1024x1024",
+        "16:9": "1280x720",
+        "9:16": "720x1280",
+        "4:3": "1024x768",
+        "3:4": "768x1024",
+        "3:2": "1152x768",
+        "2:3": "768x1152",
+        "21:9": "1344x576",
+        "9:21": "576x1344",
+        "3:1": "1440x480",
+        "1:3": "480x1440",
+    },
+    "2K": {
+        "1:1": "2048x2048",
+        "16:9": "2048x1152",
+        "9:16": "1152x2048",
+        "4:3": "2048x1536",
+        "3:4": "1536x2048",
+        "3:2": "2160x1440",
+        "2:3": "1440x2160",
+        "21:9": "2464x1056",
+        "9:21": "1056x2464",
+        "3:1": "2016x672",
+        "1:3": "672x2016",
+    },
+    "4K": {
+        "1:1": "2880x2880",
+        "16:9": "3840x2160",
+        "9:16": "2160x3840",
+        "4:3": "3264x2448",
+        "3:4": "2448x3264",
+        "3:2": "3456x2304",
+        "2:3": "2304x3456",
+        "21:9": "3808x1632",
+        "9:21": "1632x3808",
+        "3:1": "3840x1280",
+        "1:3": "1280x3840",
+    },
+}
+
+
 def tensor_to_png_bytes(tensor):
     """ComfyUI IMAGE tensor -> PNG bytes."""
     if tensor is None:
@@ -144,27 +187,62 @@ def _validate_gpt_image2_size(size_value):
     return f"{width}x{height}"
 
 
-def normalize_size(size, custom_size=""):
-    option = (size or "auto").strip().lower().replace("×", "x")
+def _extract_aspect_ratio(value):
+    match = re.search(r"(?:21:9|9:21|16:9|9:16|4:3|3:4|3:2|2:3|3:1|1:3|1:1)", str(value or ""))
+    return match.group(0) if match else "16:9"
 
-    if option.startswith("auto"):
+
+def normalize_size(image_size, aspect_ratio="16:9", custom_size=""):
+    option = (image_size or "2K").strip().replace("×", "x")
+    option_lower = option.lower()
+
+    if option_lower.startswith("auto"):
         return "auto"
 
-    if option.startswith("custom"):
+    if option_lower.startswith("custom"):
         custom = (custom_size or "").strip().lower().replace("×", "x")
         if not custom:
             raise ValueError("选择 custom 时，custom_size 必须填写，例如 3072x1024 或 1024x3072")
         return _validate_gpt_image2_size(custom)
 
-    match = re.match(r"(\d{3,4}x\d{3,4})", option)
+    match = re.match(r"(\d{3,4}x\d{3,4})", option_lower)
     if match:
         return _validate_gpt_image2_size(match.group(1))
 
-    raise ValueError(f"无法识别 size 选项: {size}")
+    tier = None
+    if "1k" in option_lower:
+        tier = "1K"
+    elif "2k" in option_lower:
+        tier = "2K"
+    elif "4k" in option_lower:
+        tier = "4K"
+
+    ratio = _extract_aspect_ratio(aspect_ratio)
+    if tier and ratio in GPT_IMAGE2_SIZE_TABLE[tier]:
+        return _validate_gpt_image2_size(GPT_IMAGE2_SIZE_TABLE[tier][ratio])
+
+    raise ValueError(f"无法识别尺寸组合: image_size={image_size}, aspect_ratio={aspect_ratio}")
 
 
 def is_retryable_http_status(status_code):
     return status_code in (408, 429) or status_code >= 500
+
+
+def safe_choice(value, choices, default):
+    return value if value in choices else default
+
+
+def safe_int(value, default, min_value=None, max_value=None):
+    try:
+        number = int(value)
+    except (TypeError, ValueError):
+        number = default
+
+    if min_value is not None:
+        number = max(min_value, number)
+    if max_value is not None:
+        number = min(max_value, number)
+    return number
 
 
 def emit_runtime_status(
@@ -576,18 +654,25 @@ class ComfyuiLuckGPTImage2Node:
     """Official gpt-image-2 node with real size, quality, format, and mask controls."""
 
     MODELS = ["gpt-image-2"]
-    SIZES = [
-        "auto (自动)",
-        "1024x1024 (1:1 方形)",
-        "1536x1024 (3:2 横版)",
-        "1024x1536 (2:3 竖版)",
-        "2048x2048 (1:1 2K 方形)",
-        "2048x1152 (16:9 2K 横版)",
-        "3840x2160 (16:9 4K 横版, 实验)",
-        "2160x3840 (9:16 4K 竖版, 实验)",
-        "3072x1024 (3:1 超宽, 合法边界)",
-        "1024x3072 (1:3 长竖, 合法边界)",
-        "custom (自定义宽x高)",
+    IMAGE_SIZES = [
+        "auto (不传size)",
+        "1K",
+        "2K",
+        "4K",
+        "custom (自定义)",
+    ]
+    ASPECT_RATIOS = [
+        "1:1",
+        "16:9",
+        "9:16",
+        "4:3",
+        "3:4",
+        "3:2",
+        "2:3",
+        "21:9",
+        "9:21",
+        "3:1",
+        "1:3",
     ]
 
     @classmethod
@@ -599,13 +684,12 @@ class ComfyuiLuckGPTImage2Node:
                 "mode (模式)": (["AUTO", "text2img", "img2img"], {"default": "AUTO"}),
                 "model (模型)": (cls.MODELS, {"default": "gpt-image-2"}),
                 "api_base (接口域名)": (API_BASE_URLS, {"default": "https://api.apiyi.com"}),
-                "size_ratio (尺寸/比例)": (cls.SIZES, {"default": "2048x1152 (16:9 2K 横版)"}),
-                "custom_size (custom时: 宽x高, 例3072x1024)": ("STRING", {"default": "", "multiline": False}),
+                "image_size (分辨率)": (cls.IMAGE_SIZES, {"default": "2K"}),
+                "aspect_ratio (宽高比)": (cls.ASPECT_RATIOS, {"default": "16:9"}),
+                "custom_size (仅custom填写: 宽x高)": ("STRING", {"default": "1600x1200", "multiline": False}),
                 "quality (画质)": (["auto", "low", "medium", "high"], {"default": "auto"}),
                 "output_format (输出格式)": (["png", "jpeg", "webp"], {"default": "png"}),
                 "output_compression (压缩率)": ("INT", {"default": 85, "min": 0, "max": 100}),
-                "background (背景)": (["auto", "opaque"], {"default": "auto"}),
-                "moderation (审核)": (["auto", "low"], {"default": "auto"}),
                 "seed (种子)": (
                     "INT",
                     {
@@ -641,7 +725,7 @@ class ComfyuiLuckGPTImage2Node:
             image_payloads.append((f"image_{i:02d}.png", tensor_to_png_bytes(tensor)))
         return image_payloads
 
-    def _payload_fields(self, model, prompt, size, quality, output_format, output_compression, background, moderation):
+    def _payload_fields(self, model, prompt, size, quality, output_format, output_compression):
         fields = {
             "model": model,
             "prompt": prompt,
@@ -653,10 +737,6 @@ class ComfyuiLuckGPTImage2Node:
         if output_format != "png":
             fields["output_format"] = output_format
             fields["output_compression"] = output_compression
-        if background != "auto":
-            fields["background"] = background
-        if moderation != "auto":
-            fields["moderation"] = moderation
         return fields
 
     def _request_text2img(self, api_base, headers, fields, timeout_seconds):
@@ -709,19 +789,24 @@ class ComfyuiLuckGPTImage2Node:
         mode = kwargs.get("mode (模式)", "AUTO")
         model = kwargs.get("model (模型)", "gpt-image-2")
         api_base = kwargs.get("api_base (接口域名)", "https://api.apiyi.com").rstrip("/")
-        size = kwargs.get("size_ratio (尺寸/比例)", kwargs.get("size (尺寸)", "2048x1152 (16:9 2K 横版)"))
-        custom_size = kwargs.get(
-            "custom_size (custom时: 宽x高, 例3072x1024)",
-            kwargs.get("custom_size (自定义尺寸)", ""),
+        image_size = kwargs.get(
+            "image_size (分辨率)",
+            kwargs.get("size_ratio (尺寸/比例)", kwargs.get("size (尺寸)", "2K")),
         )
-        quality = kwargs.get("quality (画质)", "auto")
-        output_format = kwargs.get("output_format (输出格式)", "png")
-        output_compression = kwargs.get("output_compression (压缩率)", 85)
-        background = kwargs.get("background (背景)", "auto")
-        moderation = kwargs.get("moderation (审核)", "auto")
-        seed = kwargs.get("seed (种子)", 0)
-        timeout_seconds = kwargs.get("timeout_seconds (超时秒数)", 360)
-        retry_times = kwargs.get("retry_times (重试次数)", 3)
+        aspect_ratio = kwargs.get("aspect_ratio (宽高比)", "16:9")
+        custom_size = kwargs.get(
+            "custom_size (仅custom填写: 宽x高)",
+            kwargs.get(
+                "custom_size (custom时: 宽x高, 例3072x1024)",
+                kwargs.get("custom_size (自定义尺寸)", ""),
+            ),
+        )
+        quality = safe_choice(kwargs.get("quality (画质)", "auto"), ["auto", "low", "medium", "high"], "auto")
+        output_format = safe_choice(kwargs.get("output_format (输出格式)", "png"), ["png", "jpeg", "webp"], "png")
+        output_compression = safe_int(kwargs.get("output_compression (压缩率)", 85), 85, 0, 100)
+        seed = safe_int(kwargs.get("seed (种子)", 0), 0, 0, 2147483647)
+        timeout_seconds = safe_int(kwargs.get("timeout_seconds (超时秒数)", 360), 360, 60, 1800)
+        retry_times = safe_int(kwargs.get("retry_times (重试次数)", 3), 3, 1, 10)
         unique_id = kwargs.get("unique_id")
         start_ts = time.time()
 
@@ -733,7 +818,7 @@ class ComfyuiLuckGPTImage2Node:
         if not clean_prompt:
             raise ValueError("prompt 不能为空")
 
-        effective_size = normalize_size(size, custom_size)
+        effective_size = normalize_size(image_size, aspect_ratio, custom_size)
         image_payloads = self._collect_images(kwargs)
         mask_bytes = mask_to_png_bytes(kwargs.get("mask"))
 
@@ -756,13 +841,9 @@ class ComfyuiLuckGPTImage2Node:
             quality,
             output_format,
             output_compression,
-            background,
-            moderation,
         )
-        if actual_mode == "img2img":
-            fields.pop("moderation", None)
 
-        print(f"[Comfyui-Luck gpt-image-2] mode={actual_mode}, fields={fields}, seed={seed} (not sent to API)")
+        print(f"[Comfyui-Luck gpt-image-2] mode={actual_mode}, image_size={image_size}, aspect_ratio={aspect_ratio}, fields={fields}, seed={seed} (not sent to API)")
         emit_runtime_status(unique_id, "running", "开始生成", 0.0, 0, retry_times, timeout_seconds)
 
         last_error = None
@@ -814,7 +895,9 @@ class ComfyuiLuckGPTImage2Node:
                     "model": model,
                     "mode": actual_mode,
                     "api_base": api_base,
-                    "size_option": size,
+                    "image_size": image_size,
+                    "aspect_ratio": aspect_ratio,
+                    "resolved_size": effective_size,
                     "request_fields": fields,
                     "input_images": len(image_payloads),
                     "mask": mask_bytes is not None,
