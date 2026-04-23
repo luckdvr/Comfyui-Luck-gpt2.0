@@ -163,6 +163,10 @@ def normalize_size(size, custom_size=""):
     raise ValueError(f"无法识别 size 选项: {size}")
 
 
+def is_retryable_http_status(status_code):
+    return status_code in (408, 429) or status_code >= 500
+
+
 def emit_runtime_status(
     node_id,
     status,
@@ -459,7 +463,16 @@ class ComfyuiLuckGPT20Node:
 
                 if response.status_code != 200:
                     last_error = f"API 错误 {response.status_code}: {response.text}"
-                    if response.status_code == 429 or response.status_code >= 500:
+                    if is_retryable_http_status(response.status_code) and attempt < retry_times:
+                        emit_runtime_status(
+                            unique_id,
+                            "running",
+                            f"API 返回 {response.status_code}，重试中 ({attempt}/{retry_times})",
+                            time.time() - start_ts,
+                            attempt,
+                            retry_times,
+                            timeout_seconds,
+                        )
                         time.sleep(min(2 ** (attempt - 1), 8))
                         continue
                     raise RuntimeError(last_error)
@@ -532,7 +545,7 @@ class ComfyuiLuckGPT20Node:
                 break
             except Exception as exc:
                 last_error = str(exc)
-                if attempt < retry_times and ("429" in last_error or "5" in last_error[:3]):
+                if attempt < retry_times and ("408" in last_error or "429" in last_error or "5" in last_error[:3]):
                     time.sleep(min(2 ** (attempt - 1), 8))
                     continue
                 emit_runtime_status(
@@ -603,7 +616,7 @@ class ComfyuiLuckGPTImage2Node:
                     },
                 ),
                 "timeout_seconds (超时秒数)": ("INT", {"default": 360, "min": 60, "max": 1800}),
-                "retry_times (重试次数)": ("INT", {"default": 2, "min": 1, "max": 5}),
+                "retry_times (重试次数)": ("INT", {"default": 3, "min": 1, "max": 10}),
             },
             "optional": {
                 **{f"image_{i:02d}": ("IMAGE",) for i in range(1, 6)},
@@ -708,7 +721,7 @@ class ComfyuiLuckGPTImage2Node:
         moderation = kwargs.get("moderation (审核)", "auto")
         seed = kwargs.get("seed (种子)", 0)
         timeout_seconds = kwargs.get("timeout_seconds (超时秒数)", 360)
-        retry_times = kwargs.get("retry_times (重试次数)", 2)
+        retry_times = kwargs.get("retry_times (重试次数)", 3)
         unique_id = kwargs.get("unique_id")
         start_ts = time.time()
 
@@ -779,7 +792,16 @@ class ComfyuiLuckGPTImage2Node:
 
                 if response.status_code != 200:
                     last_error = f"API 错误 {response.status_code}: {response.text}"
-                    if response.status_code == 429 or response.status_code >= 500:
+                    if is_retryable_http_status(response.status_code) and attempt < retry_times:
+                        emit_runtime_status(
+                            unique_id,
+                            "running",
+                            f"API 返回 {response.status_code}，重试中 ({attempt}/{retry_times})",
+                            time.time() - start_ts,
+                            attempt,
+                            retry_times,
+                            timeout_seconds,
+                        )
                         time.sleep(min(2 ** (attempt - 1), 8))
                         continue
                     raise RuntimeError(last_error)

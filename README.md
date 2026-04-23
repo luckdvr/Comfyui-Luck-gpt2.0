@@ -47,6 +47,7 @@ python3 -m pip install -r requirements.txt
 - 默认 `chat_completions (推荐)` 端点会从 `choices[0].message.content` 里提取图片 URL 或 data URL。
 - URL 输出通常是临时 CDN 链接，约 1 天有效；需要长期保存时请尽快转存。
 - 推荐超时：`300` 秒。
+- `408`、`429`、`5xx` 会按 `retry_times` 自动重试。
 
 ## 节点 2：Comfyui-Luck gpt-image-2
 
@@ -94,6 +95,7 @@ python3 -m pip install -r requirements.txt
 - 节点不提供 `background=transparent`。
 - `moderation` 只在文生图请求里发送，编辑请求不发送，减少参数校验风险。
 - 推荐超时：`360` 秒。
+- `408`、`429`、`5xx` 会按 `retry_times` 自动重试。`408 Timeout` 通常是 APIYi 上游生成任务超时，不是节点参数填错。
 
 ## API 域名
 
