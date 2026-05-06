@@ -1,10 +1,11 @@
 # Comfyui-Luck gpt-2.0
 
-API易 GPT 图像模型的 ComfyUI 自定义节点包，当前包含两个独立节点：
+API易 GPT 图像模型的 ComfyUI 自定义节点包，当前包含三个独立节点：
 
 | 节点 | 模型 | 适合场景 | 尺寸控制 |
 |---|---|---|---|
 | `Comfyui-Luck gpt-2.0 all` | `gpt-image-2-all` | 便宜、快、中文友好、文生图/改图/多图融合 | 只能把比例写进 prompt |
+| `Comfyui-Luck gpt-image-2-vip` | `gpt-image-2-vip` | 固定 `$0.03/张`、需要 30 档尺寸或 4K | 真正传 30 档 `size` API 参数 |
 | `Comfyui-Luck gpt-image-2` | `gpt-image-2` | 需要真实 size、2K/4K、自定义尺寸、quality、mask | 真正传 `size` API 参数 |
 
 ## 安装
@@ -25,6 +26,7 @@ python3 -m pip install -r requirements.txt
 特点：
 
 - 统一按次计费，约 `$0.03/张`。
+- ChatGPT 网页线，约 30-60 秒，出图较快。
 - 支持文生图、单图改图、多图融合、自然语言改图。
 - 默认走 API易主推的 `POST /v1/chat/completions`，提示词遵循更好。
 - 可切到 `images_api (兼容)`，走 `/v1/images/generations` 或 `/v1/images/edits`。
@@ -49,7 +51,42 @@ python3 -m pip install -r requirements.txt
 - 推荐超时：`300` 秒。
 - `408`、`429`、`5xx` 会按 `retry_times` 自动重试。
 
-## 节点 2：Comfyui-Luck gpt-image-2
+## 节点 2：Comfyui-Luck gpt-image-2-vip
+
+使用 `gpt-image-2-vip`。
+
+特点：
+
+- 统一按次计费，约 `$0.03/张`，所有 size 同价。
+- Codex 官逆线，约 90-150 秒，适合必须锁定尺寸或需要 4K 的场景。
+- 支持文生图、单图改图、多图融合、自然语言改图。
+- 支持 `chat_completions (推荐)` 与 `images_api (兼容)` 两种端点。
+- 真正发送 `size` 字段；不支持 `quality` 和 `n`，节点不会发送这些字段。
+- `b64_json` 已带 `data:image/png;base64,` 前缀，节点会自动兼容解码。
+
+尺寸换算：
+
+| vip_aspect_ratio | 1K Fast | 2K Recommended | 4K Detail |
+|---|---:|---:|---:|
+| `1:1` | `1280x1280` | `2048x2048` | `2880x2880` |
+| `2:3` | `848x1280` | `1360x2048` | `2336x3520` |
+| `3:2` | `1280x848` | `2048x1360` | `3520x2336` |
+| `3:4` | `960x1280` | `1536x2048` | `2480x3312` |
+| `4:3` | `1280x960` | `2048x1536` | `3312x2480` |
+| `4:5` | `1024x1280` | `1632x2048` | `2560x3216` |
+| `5:4` | `1280x1024` | `2048x1632` | `3216x2560` |
+| `9:16` | `720x1280` | `1152x2048` | `2160x3840` |
+| `16:9` | `1280x720` | `2048x1152` | `3840x2160` |
+| `21:9` | `1280x544` | `2048x864` | `3840x1632` |
+
+说明：
+
+- 节点会把上表解析成真实 `size` 字段发送给 API。
+- `gpt-image-2-vip` 不接受表外尺寸；需要任意合法自定义尺寸时，请使用 `Comfyui-Luck gpt-image-2`。
+- 推荐超时：`300` 秒。
+- `408`、`429`、`5xx` 会按 `retry_times` 自动重试。
+
+## 节点 3：Comfyui-Luck gpt-image-2
 
 使用官方契约的 `gpt-image-2`。
 
@@ -133,8 +170,9 @@ Authorization: Bearer YOUR_API_KEY
 里面包含：
 
 - 一个 `gpt-image-2-all` 示例，默认使用推荐的 chat/completions 端点。
+- 一个 `gpt-image-2-vip` 示例，使用 `image_size=2K Recommended` + `aspect_ratio=16:9`，发送 `size=2048x1152`。
 - 一个 `gpt-image-2` 示例，使用真实 `size=2048x1152`、`quality=high`、`output_format=jpeg`。
-- 中文 Note 节点，说明两个渠道怎么选、比例前置写法、真实尺寸控制和图片编辑/mask 用法。
+- 中文 Note 节点，说明三个模型怎么选、比例前置写法、VIP 30 档 size、真实尺寸控制和图片编辑/mask 用法。
 
 分享工作流前请清空 API Key。
 
@@ -144,9 +182,13 @@ Authorization: Bearer YOUR_API_KEY
 
 不能。`gpt-image-2-all` 没有 `size` 参数，2K / 4K 只能作为 prompt 描述，无法保证输出像素。当前节点按你的要求只前置官方推荐比例写法，不再额外加入噪音尺寸描述。
 
+### gpt-image-2-vip 怎么用？
+
+添加 `Comfyui-Luck gpt-image-2-vip` 节点，再选 `image_size` 和 `aspect_ratio`。例如 `2K Recommended + 16:9` 会发送 `size=2048x1152`；`4K Detail + 16:9` 会发送 `size=3840x2160`。
+
 ### 哪个节点能真实控制分辨率？
 
-用 `Comfyui-Luck gpt-image-2`。例如 `image_size=2K` + `aspect_ratio=4:3` 会真正向 API 传 `size=2048x1536`。
+如果只需要 30 档常见尺寸并想固定 `$0.03/张`，用 `Comfyui-Luck gpt-image-2-vip`。如果需要任意合法自定义尺寸、`quality` 或 mask 局部重绘，用 `Comfyui-Luck gpt-image-2`。例如 `image_size=2K` + `aspect_ratio=4:3` 会真正向 API 传 `size=2048x1536`。
 
 ### 加载旧工作流报 `Value 3 smaller than min of 30`？
 

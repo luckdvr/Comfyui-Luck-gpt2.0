@@ -1,6 +1,6 @@
 {
-  "last_node_id": 8,
-  "last_link_id": 2,
+  "last_node_id": 10,
+  "last_link_id": 3,
   "nodes": [
     {
       "id": 1,
@@ -77,7 +77,7 @@
       "mode": 0,
       "properties": {},
       "widgets_values": [
-        "【两个节点怎么选】\n\n1. Comfyui-Luck gpt-2.0 all\n   - 模型：gpt-image-2-all\n   - 便宜快，约 $0.03/张\n   - 默认走 chat/completions 主推端点\n   - 不能硬控尺寸，只把画幅写进 prompt\n\n2. Comfyui-Luck gpt-image-2\n   - 模型：gpt-image-2\n   - 可真正传 image_size + aspect_ratio\n   - 支持 1K / 2K / 4K / custom / mask\n   - 更贵更慢，timeout 建议 360 秒\n   - 408 / 429 / 5xx 会自动重试\n\n分享工作流前请清空 API Key。"
+        "【模型怎么选】\n\n1. Comfyui-Luck gpt-2.0 all\n   - gpt-image-2-all：$0.03/张，约 30-60 秒\n   - 不传真实 size，只把画幅写进 prompt\n\n2. Comfyui-Luck gpt-image-2-vip\n   - gpt-image-2-vip：$0.03/张，约 90-150 秒\n   - 用 image_size + aspect_ratio 传真实 size\n   - 例：2K Recommended + 16:9 = 2048x1152\n   - 4K Detail + 16:9 = 3840x2160\n\n3. Comfyui-Luck gpt-image-2\n   - 官转模型，支持 quality / custom / mask\n   - timeout 建议 360 秒\n\n分享工作流前请清空 API Key。"
       ]
     },
     {
@@ -90,7 +90,7 @@
       "mode": 0,
       "properties": {},
       "widgets_values": [
-        "【比例控制】\n\n这个模型没有真正的 size / quality / n / aspect_ratio API 参数。\n节点不会传这些字段，只会把 aspect_ratio 对应的推荐写法放在 prompt 最前面。\n\n推荐写法：\n- 方形：1024×1024 方图 / 1:1 方形构图\n- 横版：横版 16:9 / 宽屏 16:9 电影画幅\n- 竖版：竖版 9:16 / 手机海报 9:16\n- 超宽横幅：横幅 21:9 超宽银幕\n- 经典印刷：4:3 标准画幅 / 3:2 经典画幅\n\n注意：这是提示词控制，不是 API 硬尺寸参数。"
+        "【all / vip 尺寸控制】\n\ngpt-image-2-all：\n- 没有真正的 size / quality / n / aspect_ratio API 参数\n- 节点不会传这些字段，只把 aspect_ratio 推荐写法放在 prompt 最前面\n- 这是提示词控制，不是像素级硬控\n\ngpt-image-2-vip：\n- 独立节点，会真正传 size\n- image_size：1K Fast / 2K Recommended / 4K Detail\n- aspect_ratio：1:1、2:3、3:2、3:4、4:3、4:5、5:4、9:16、16:9、21:9\n- 不支持 quality 和 n，节点不会发送"
       ]
     },
     {
@@ -103,7 +103,7 @@
       "mode": 0,
       "properties": {},
       "widgets_values": [
-        "【图片编辑 / 多图融合】\n\nall 节点最多可接 image_01~image_14。\ngpt-image-2 官方节点最多可接 image_01~image_05，并可接 mask。\n\n多图时顺序有意义，可以在 prompt 里这样写：\n“把图1的人物放进图2的场景，参考图3的画风。”\n\nmask：透明区域 = 要重绘区域，仅对第一张 image 生效。"
+        "【图片编辑 / 多图融合】\n\nall / vip 节点最多可接 image_01~image_14。\ngpt-image-2 官方节点最多可接 image_01~image_05，并可接 mask。\n\n多图时顺序有意义，可以在 prompt 里这样写：\n“把图1的人物放进图2的场景，参考图3的画风。”\n\nmask：透明区域 = 要重绘区域，仅对第一张 image 生效。"
       ]
     },
     {
@@ -169,12 +169,78 @@
       "properties": {}
     },
     {
+      "id": 9,
+      "type": "ComfyuiLuckGPTImage2VipNode",
+      "pos": [420, 1500],
+      "size": [520, 590],
+      "flags": {},
+      "order": 7,
+      "mode": 0,
+      "inputs": [],
+      "outputs": [
+        {
+          "name": "image",
+          "type": "IMAGE",
+          "links": [3],
+          "slot_index": 0
+        },
+        {
+          "name": "response",
+          "type": "STRING",
+          "links": null,
+          "slot_index": 1
+        },
+        {
+          "name": "image_urls",
+          "type": "STRING",
+          "links": null,
+          "slot_index": 2
+        }
+      ],
+      "properties": {
+        "Node name for S&R": "ComfyuiLuckGPTImage2VipNode"
+      },
+      "widgets_values": [
+        "",
+        "白色陶瓷马克杯放在灰色桌面上，柔和自然光，简洁产品摄影",
+        "AUTO",
+        "gpt-image-2-vip",
+        "https://api.apiyi.com",
+        "chat_completions (推荐)",
+        "2K Recommended",
+        "16:9",
+        "url",
+        0,
+        "randomize",
+        300,
+        3
+      ]
+    },
+    {
+      "id": 10,
+      "type": "PreviewImage",
+      "pos": [1000, 1500],
+      "size": [360, 360],
+      "flags": {},
+      "order": 8,
+      "mode": 0,
+      "inputs": [
+        {
+          "name": "images",
+          "type": "IMAGE",
+          "link": 3
+        }
+      ],
+      "outputs": [],
+      "properties": {}
+    },
+    {
       "id": 8,
       "type": "Note",
       "pos": [40, 720],
       "size": [330, 270],
       "flags": {},
-      "order": 7,
+      "order": 9,
       "mode": 0,
       "properties": {},
       "widgets_values": [
@@ -184,7 +250,8 @@
   ],
   "links": [
     [1, 1, 0, 2, 0, "IMAGE"],
-    [2, 6, 0, 7, 0, "IMAGE"]
+    [2, 6, 0, 7, 0, "IMAGE"],
+    [3, 9, 0, 10, 0, "IMAGE"]
   ],
   "groups": [],
   "config": {},

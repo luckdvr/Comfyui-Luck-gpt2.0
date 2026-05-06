@@ -4,8 +4,9 @@
 Comfyui-Luck gpt-2.0 nodes for APIYi.
 
 The gpt-image-2-all API does not accept size, n, quality, or aspect_ratio.
-Composition controls are converted into a prompt prefix. The official
-gpt-image-2 node exposes real size/quality/mask controls.
+Composition controls are converted into a prompt prefix. The gpt-image-2-vip
+API accepts one of 30 documented size values. The official gpt-image-2 node
+exposes real size/quality/mask controls.
 """
 
 import base64
@@ -34,6 +35,46 @@ AUTO_RATIO_PROMPTS = {
     "21:9": "横幅 21:9 超宽银幕",
     "4:3": "4:3 标准画幅",
     "3:2": "3:2 经典画幅",
+}
+
+
+GPT_IMAGE2_VIP_SIZE_TABLE = {
+    "1K Fast": {
+        "1:1": "1280x1280",
+        "2:3": "848x1280",
+        "3:2": "1280x848",
+        "3:4": "960x1280",
+        "4:3": "1280x960",
+        "4:5": "1024x1280",
+        "5:4": "1280x1024",
+        "9:16": "720x1280",
+        "16:9": "1280x720",
+        "21:9": "1280x544",
+    },
+    "2K Recommended": {
+        "1:1": "2048x2048",
+        "2:3": "1360x2048",
+        "3:2": "2048x1360",
+        "3:4": "1536x2048",
+        "4:3": "2048x1536",
+        "4:5": "1632x2048",
+        "5:4": "2048x1632",
+        "9:16": "1152x2048",
+        "16:9": "2048x1152",
+        "21:9": "2048x864",
+    },
+    "4K Detail": {
+        "1:1": "2880x2880",
+        "2:3": "2336x3520",
+        "3:2": "3520x2336",
+        "3:4": "2480x3312",
+        "4:3": "3312x2480",
+        "4:5": "2560x3216",
+        "5:4": "3216x2560",
+        "9:16": "2160x3840",
+        "16:9": "3840x2160",
+        "21:9": "3840x1632",
+    },
 }
 
 
@@ -239,6 +280,12 @@ def normalize_size(image_size, aspect_ratio="16:9", custom_size=""):
     raise ValueError(f"无法识别尺寸组合: image_size={image_size}, aspect_ratio={aspect_ratio}")
 
 
+def normalize_vip_size(vip_image_size, vip_aspect_ratio):
+    tier = safe_choice(vip_image_size, list(GPT_IMAGE2_VIP_SIZE_TABLE.keys()), "2K Recommended")
+    ratio = safe_choice(vip_aspect_ratio, list(GPT_IMAGE2_VIP_SIZE_TABLE[tier].keys()), "16:9")
+    return GPT_IMAGE2_VIP_SIZE_TABLE[tier][ratio]
+
+
 def is_retryable_http_status(status_code):
     return status_code in (408, 429) or status_code >= 500
 
@@ -423,12 +470,14 @@ class ComfyuiLuckGPT20Node:
 
         return torch.cat(tensors, dim=0), urls, content
 
-    def _request_text2img(self, api_base, headers, model, prompt, response_format, timeout_seconds):
+    def _request_text2img(self, api_base, headers, model, prompt, response_format, resolved_size, timeout_seconds):
         payload = {
             "model": model,
             "prompt": prompt,
             "response_format": response_format,
         }
+        if resolved_size:
+            payload["size"] = resolved_size
         return requests.post(
             f"{api_base}/v1/images/generations",
             headers={**headers, "Content-Type": "application/json"},
@@ -436,12 +485,14 @@ class ComfyuiLuckGPT20Node:
             timeout=timeout_seconds,
         )
 
-    def _request_img2img(self, api_base, headers, model, prompt, response_format, image_payloads, timeout_seconds):
+    def _request_img2img(self, api_base, headers, model, prompt, response_format, resolved_size, image_payloads, timeout_seconds):
         data = {
             "model": model,
             "prompt": prompt,
             "response_format": response_format,
         }
+        if resolved_size:
+            data["size"] = resolved_size
         files = [
             ("image[]", (filename, BytesIO(image_bytes), "image/png"))
             for filename, image_bytes in image_payloads
@@ -454,7 +505,7 @@ class ComfyuiLuckGPT20Node:
             timeout=timeout_seconds,
         )
 
-    def _request_chat(self, api_base, headers, model, prompt, image_payloads, timeout_seconds):
+    def _request_chat(self, api_base, headers, model, prompt, resolved_size, image_payloads, timeout_seconds):
         if image_payloads:
             content = [{"type": "text", "text": prompt}]
             for _, image_bytes in image_payloads:
@@ -468,6 +519,8 @@ class ComfyuiLuckGPT20Node:
             "messages": [{"role": "user", "content": content}],
             "stream": False,
         }
+        if resolved_size:
+            payload["size"] = resolved_size
         return requests.post(
             f"{api_base}/v1/chat/completions",
             headers={**headers, "Content-Type": "application/json"},
@@ -495,6 +548,8 @@ class ComfyuiLuckGPT20Node:
             raise ValueError("API Key 不能为空")
 
         effective_prompt, prompt_prefix = self._compose_prompt(prompt, aspect_ratio)
+        resolved_size = None
+        size_control = "prompt_prefix"
         image_payloads = self._collect_images(kwargs)
         print(f"[Comfyui-Luck gpt-2.0] effective prompt: {effective_prompt[:500]}")
 
@@ -510,7 +565,7 @@ class ComfyuiLuckGPT20Node:
         headers = {"Authorization": f"Bearer {api_key.strip()}"}
         last_error = None
 
-        print(f"[Comfyui-Luck gpt-2.0] endpoint={endpoint}, mode={actual_mode}, model={model}, seed={seed} (not sent to API)")
+        print(f"[Comfyui-Luck gpt-2.0] endpoint={endpoint}, mode={actual_mode}, model={model}, resolved_size={resolved_size}, seed={seed} (not sent to API)")
         emit_runtime_status(unique_id, "running", "开始生成", 0.0, 0, retry_times, timeout_seconds)
 
         for attempt in range(1, retry_times + 1):
@@ -531,6 +586,7 @@ class ComfyuiLuckGPT20Node:
                         headers,
                         model,
                         effective_prompt,
+                        resolved_size,
                         image_payloads,
                         timeout_seconds,
                     )
@@ -541,6 +597,7 @@ class ComfyuiLuckGPT20Node:
                         model,
                         effective_prompt,
                         response_format,
+                        resolved_size,
                         image_payloads,
                         timeout_seconds,
                     )
@@ -551,6 +608,7 @@ class ComfyuiLuckGPT20Node:
                         model,
                         effective_prompt,
                         response_format,
+                        resolved_size,
                         timeout_seconds,
                     )
 
@@ -594,6 +652,8 @@ class ComfyuiLuckGPT20Node:
                     "mode": actual_mode,
                     "api_base": api_base,
                     "aspect_ratio": aspect_ratio,
+                    "resolved_size": resolved_size,
+                    "size_control": size_control,
                     "prompt_prefix": prompt_prefix,
                     "prompt": effective_prompt,
                     "response_format": response_format,
@@ -663,6 +723,247 @@ class ComfyuiLuckGPT20Node:
             timeout_seconds,
         )
         raise RuntimeError(f"Comfyui-Luck gpt-2.0 连续 {retry_times} 次失败，最后错误: {last_error}")
+
+
+class ComfyuiLuckGPTImage2VipNode(ComfyuiLuckGPT20Node):
+    """gpt-image-2-vip node with documented 30-size controls."""
+
+    MODELS = ["gpt-image-2-vip"]
+    IMAGE_SIZES = ["1K Fast", "2K Recommended", "4K Detail"]
+    ASPECT_RATIOS = ["1:1", "2:3", "3:2", "3:4", "4:3", "4:5", "5:4", "9:16", "16:9", "21:9"]
+
+    @classmethod
+    def INPUT_TYPES(cls):
+        return {
+            "required": {
+                "api_key (API密钥)": ("STRING", {"default": "", "multiline": False}),
+                "prompt (提示词)": ("STRING", {"default": "", "multiline": True}),
+                "mode (模式)": (["AUTO", "text2img", "img2img"], {"default": "AUTO"}),
+                "model (模型)": (cls.MODELS, {"default": "gpt-image-2-vip"}),
+                "api_base (接口域名)": (API_BASE_URLS, {"default": "https://api.apiyi.com"}),
+                "endpoint (端点)": (["chat_completions (推荐)", "images_api (兼容)"], {"default": "chat_completions (推荐)"}),
+                "image_size (VIP分辨率)": (cls.IMAGE_SIZES, {"default": "2K Recommended"}),
+                "aspect_ratio (VIP宽高比)": (cls.ASPECT_RATIOS, {"default": "16:9"}),
+                "response_format (响应格式)": (["url", "b64_json"], {"default": "url"}),
+                "seed (种子)": (
+                    "INT",
+                    {
+                        "default": 0,
+                        "min": 0,
+                        "max": 2147483647,
+                        "control_after_generate": True,
+                    },
+                ),
+                "timeout_seconds (超时秒数)": ("INT", {"default": 300, "min": 30, "max": 1200}),
+                "retry_times (重试次数)": ("INT", {"default": 3, "min": 1, "max": 10}),
+            },
+            "optional": {
+                **{f"image_{i:02d}": ("IMAGE",) for i in range(1, 15)}
+            },
+            "hidden": {
+                "unique_id": "UNIQUE_ID",
+            },
+        }
+
+    CATEGORY = "Comfyui-Luck/gpt-image-2-vip"
+
+    def generate(self, **kwargs):
+        api_key = kwargs.get("api_key (API密钥)", "")
+        prompt = kwargs.get("prompt (提示词)", "")
+        mode = kwargs.get("mode (模式)", "AUTO")
+        model = kwargs.get("model (模型)", "gpt-image-2-vip")
+        api_base = kwargs.get("api_base (接口域名)", "https://api.apiyi.com").rstrip("/")
+        endpoint = kwargs.get("endpoint (端点)", "chat_completions (推荐)")
+        image_size = kwargs.get("image_size (VIP分辨率)", "2K Recommended")
+        aspect_ratio = kwargs.get("aspect_ratio (VIP宽高比)", "16:9")
+        response_format = kwargs.get("response_format (响应格式)", "url")
+        seed = kwargs.get("seed (种子)", 0)
+        timeout_seconds = kwargs.get("timeout_seconds (超时秒数)", 300)
+        retry_times = kwargs.get("retry_times (重试次数)", 3)
+        unique_id = kwargs.get("unique_id")
+        start_ts = time.time()
+
+        if not api_key.strip():
+            emit_runtime_status(unique_id, "error", "API Key 为空", 0.0, 0, retry_times, timeout_seconds)
+            raise ValueError("API Key 不能为空")
+
+        clean_prompt = (prompt or "").strip()
+        if not clean_prompt:
+            raise ValueError("prompt 不能为空")
+
+        resolved_size = normalize_vip_size(image_size, aspect_ratio)
+        image_payloads = self._collect_images(kwargs)
+
+        if mode == "AUTO":
+            actual_mode = "img2img" if image_payloads else "text2img"
+        else:
+            actual_mode = mode
+
+        if actual_mode == "img2img" and not image_payloads:
+            emit_runtime_status(unique_id, "error", "img2img 模式需要至少一张参考图", 0.0, 0, retry_times, timeout_seconds)
+            raise ValueError("img2img 模式需要至少一张参考图")
+
+        headers = {"Authorization": f"Bearer {api_key.strip()}"}
+        last_error = None
+
+        print(f"[Comfyui-Luck gpt-image-2-vip] endpoint={endpoint}, mode={actual_mode}, size={resolved_size}, seed={seed} (not sent to API)")
+        emit_runtime_status(unique_id, "running", "开始生成", 0.0, 0, retry_times, timeout_seconds)
+
+        for attempt in range(1, retry_times + 1):
+            try:
+                emit_runtime_status(
+                    unique_id,
+                    "running",
+                    f"{'图片编辑' if actual_mode == 'img2img' else '文生图'}请求中 ({attempt}/{retry_times})",
+                    time.time() - start_ts,
+                    attempt,
+                    retry_times,
+                    timeout_seconds,
+                )
+
+                if endpoint.startswith("chat_completions"):
+                    response = self._request_chat(
+                        api_base,
+                        headers,
+                        model,
+                        clean_prompt,
+                        resolved_size,
+                        image_payloads,
+                        timeout_seconds,
+                    )
+                elif actual_mode == "img2img":
+                    response = self._request_img2img(
+                        api_base,
+                        headers,
+                        model,
+                        clean_prompt,
+                        response_format,
+                        resolved_size,
+                        image_payloads,
+                        timeout_seconds,
+                    )
+                else:
+                    response = self._request_text2img(
+                        api_base,
+                        headers,
+                        model,
+                        clean_prompt,
+                        response_format,
+                        resolved_size,
+                        timeout_seconds,
+                    )
+
+                if response.status_code != 200:
+                    last_error = f"API 错误 {response.status_code}: {response.text}"
+                    if is_retryable_http_status(response.status_code) and attempt < retry_times:
+                        emit_runtime_status(
+                            unique_id,
+                            "running",
+                            f"API 返回 {response.status_code}，重试中 ({attempt}/{retry_times})",
+                            time.time() - start_ts,
+                            attempt,
+                            retry_times,
+                            timeout_seconds,
+                        )
+                        time.sleep(min(2 ** (attempt - 1), 8))
+                        continue
+                    raise RuntimeError(last_error)
+
+                data = response.json()
+                emit_runtime_status(
+                    unique_id,
+                    "running",
+                    "解析图片",
+                    time.time() - start_ts,
+                    attempt,
+                    retry_times,
+                    timeout_seconds,
+                )
+                chat_content = ""
+                if endpoint.startswith("chat_completions"):
+                    image_tensor, image_urls, chat_content = self._parse_chat_response_images(data, timeout_seconds)
+                else:
+                    image_tensor, image_urls = self._parse_response_images(data, timeout_seconds)
+
+                elapsed = time.time() - start_ts
+                response_info = {
+                    "status": "success",
+                    "model": model,
+                    "endpoint": endpoint,
+                    "mode": actual_mode,
+                    "api_base": api_base,
+                    "image_size": image_size,
+                    "aspect_ratio": aspect_ratio,
+                    "resolved_size": resolved_size,
+                    "size_control": "api_size",
+                    "prompt": clean_prompt,
+                    "response_format": response_format,
+                    "chat_content": chat_content,
+                    "seed": seed,
+                    "seed_note": "seed is a ComfyUI control only and is not sent to gpt-image-2-vip",
+                    "input_images": len(image_payloads),
+                    "output_images": int(image_tensor.shape[0]),
+                    "image_urls": image_urls,
+                    "elapsed_seconds": round(elapsed, 2),
+                }
+
+                emit_runtime_status(
+                    unique_id,
+                    "success",
+                    f"生成成功 (耗时 {elapsed:.1f}s)",
+                    elapsed,
+                    attempt,
+                    retry_times,
+                    timeout_seconds,
+                )
+                return (
+                    image_tensor,
+                    json.dumps(response_info, ensure_ascii=False, indent=2),
+                    "\n".join(image_urls),
+                )
+
+            except (requests.exceptions.Timeout, requests.exceptions.ConnectionError) as exc:
+                last_error = str(exc)
+                if attempt < retry_times:
+                    emit_runtime_status(
+                        unique_id,
+                        "running",
+                        f"网络或超时，重试中 ({attempt}/{retry_times})",
+                        time.time() - start_ts,
+                        attempt,
+                        retry_times,
+                        timeout_seconds,
+                    )
+                    time.sleep(min(2 ** (attempt - 1), 8))
+                    continue
+                break
+            except Exception as exc:
+                last_error = str(exc)
+                if attempt < retry_times and ("408" in last_error or "429" in last_error or "5" in last_error[:3]):
+                    time.sleep(min(2 ** (attempt - 1), 8))
+                    continue
+                emit_runtime_status(
+                    unique_id,
+                    "error",
+                    last_error,
+                    time.time() - start_ts,
+                    attempt,
+                    retry_times,
+                    timeout_seconds,
+                )
+                raise
+
+        elapsed = time.time() - start_ts
+        emit_runtime_status(
+            unique_id,
+            "error",
+            f"连续 {retry_times} 次失败",
+            elapsed,
+            retry_times,
+            retry_times,
+            timeout_seconds,
+        )
+        raise RuntimeError(f"Comfyui-Luck gpt-image-2-vip 连续 {retry_times} 次失败，最后错误: {last_error}")
 
 
 class ComfyuiLuckGPTImage2Node:
@@ -980,10 +1281,12 @@ class ComfyuiLuckGPTImage2Node:
 
 NODE_CLASS_MAPPINGS = {
     "ComfyuiLuckGPT20Node": ComfyuiLuckGPT20Node,
+    "ComfyuiLuckGPTImage2VipNode": ComfyuiLuckGPTImage2VipNode,
     "ComfyuiLuckGPTImage2Node": ComfyuiLuckGPTImage2Node,
 }
 
 NODE_DISPLAY_NAME_MAPPINGS = {
     "ComfyuiLuckGPT20Node": "Comfyui-Luck gpt-2.0 all",
+    "ComfyuiLuckGPTImage2VipNode": "Comfyui-Luck gpt-image-2-vip",
     "ComfyuiLuckGPTImage2Node": "Comfyui-Luck gpt-image-2",
 }
