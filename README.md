@@ -10,7 +10,7 @@ API易 GPT 图像模型的 ComfyUI 自定义节点包，当前包含出图节点
 |---|---|---|---|
 | `Comfyui-Luck gpt-2.0 all` | `gpt-image-2-all` | 便宜、快、中文友好、文生图/改图/多图融合 | 只能把比例写进 prompt |
 | `Comfyui-Luck gpt-image-2-vip` | `gpt-image-2-vip` | 固定 `$0.03/张`、Codex 官逆线 | 当前 `size` 失效，仅用 prompt 控比例 |
-| `Comfyui-Luck gpt-image-2` | `gpt-image-2` | 需要真实 size、2K/4K、自定义尺寸、quality、mask | 真正传 `size` API 参数 |
+| `Comfyui-Luck gpt-image-2` | `gpt-image-2` / `gpt-image-2.5-flare` / `gpt-image-2.5-sunburst` | 需要真实 size、2K/4K、自定义尺寸、quality、mask | 真正传 `size` API 参数 |
 
 | 提示词节点 | 默认模型 | 适合场景 |
 |---|---|---|
@@ -126,12 +126,25 @@ python3 -m pip install -r requirements.txt
 
 ## 节点 3：Comfyui-Luck gpt-image-2
 
-使用官方契约的 `gpt-image-2`。
+支持 API易官转的 `gpt-image-2`、`gpt-image-2.5-flare` 和 `gpt-image-2.5-sunburst`。更新后重启 ComfyUI，在原节点的 `model (模型)` 下拉框切换即可。节点名称、ID、控件顺序和默认模型 `gpt-image-2` 保持不变，已有工作流不会自动切换模型或画质。
+
+### GPT-Image 2.5（2026-09-10 更新）
+
+按 [API易模型概览](https://docs.apiyi.com/api-capabilities/gpt-image-2/overview)，Flare 速度优先，Sunburst 更侧重画质和编辑精度。两款都支持文生图、图片编辑、16 张参考图和 mask；节点根据 `mode` 和参考图使用 [文生图接口](https://docs.apiyi.com/api-capabilities/gpt-image-2/text-to-image) 或 [图片编辑接口](https://docs.apiyi.com/api-capabilities/gpt-image-2/image-edit)。
+
+模型下拉框同时提供 `gpt-image-2.5-flare-2026-09-08` 和 `gpt-image-2.5-sunburst-2026-09-08`，用于固定日期快照。
+
+| 模型 | quality 可选值 |
+|---|---|
+| `gpt-image-2` | `auto` / `low` / `medium` / `high` |
+| 两款 2.5（含日期版本） | `auto` / `low` / `medium` / `high` / `xhigh` / `max` |
+
+注意：按 API易 2026-09-09 的同尺寸实测输出 token 量，2.5 的 `high` 对应旧版 `medium`，2.5 的 `max` 对应旧版 `high`；这不是逐像素画质相同的保证。迁移时请主动选择画质。`auto` 的费用与耗时可能变化，建议明确选档。旧模型选择 `xhigh/max`，或传入无效模型/画质时，节点会在发送请求前报错，不会静默降档。
 
 特点：
 
 - 真正传 `size` 参数，面板按 Nano 风格拆成 `image_size (分辨率)` + `aspect_ratio (宽高比)`。
-- `quality`：`auto`、`low`、`medium`、`high`。
+- `quality` 按上表选择；`xhigh`、`max` 仅限 2.5。
 - `output_format`：`png`、`jpeg`、`webp`。
 - `output_compression`：`jpeg` / `webp` 时可用，范围 0-100。
 - 支持最多 16 张参考图。
@@ -181,15 +194,15 @@ python3 -m pip install -r requirements.txt
 
 说明：
 
-- `gpt-image-2` 返回的 `b64_json` 是纯 base64，不带 `data:image/...;base64,` 前缀；节点会自动解码成 ComfyUI 图片。
-- 节点不会发送 `input_fidelity`。
+- 三款模型返回 `b64_json`，节点会自动解码成 ComfyUI 图片，也兼容带 data URL 前缀的结果。
+- 节点不会发送 `response_format` 或 `input_fidelity`，避免接口拒绝请求。
 - 节点主面板不再显示 `background` / `moderation`，默认不传，使用 API 默认值。
-- 推荐超时按 `quality` 分档：`low` 至少 `120` 秒，`medium` 至少 `240` 秒，`high` 建议 `600` 秒起步；节点默认 `600` 秒。
+- 节点默认超时 `600` 秒；2.5 的 `xhigh/max`、2K/4K 或复杂编辑建议保留该值，必要时调高。同步请求在客户端超时后仍可能计费，自动重试可能产生额外费用；不希望自动重试时将 `retry_times` 设为 `1`。
 - `408`、`429`、`5xx` 会按 `retry_times` 自动重试。`408 Timeout` 通常是 APIYi 上游生成任务超时，不是节点参数填错。
 
 `background` / `moderation` 原本的作用：
 
-- `background`: OpenAI Images API 的背景控制字段。`gpt-image-2` 不支持 `transparent`，而 `auto` / `opaque` 对大多数普通出图区别不明显，所以节点默认不传。
+- `background`: Images API 的背景控制字段，本节点默认不传。API易当前参数速查表与详细字段对 `transparent` 的说明不一致，本次未新增透明背景开关。
 - `moderation`: 文生图审核强度，通常是 `auto` 或 `low`。它不属于图片编辑接口的核心字段，日常使用默认即可，所以节点主面板不再暴露。
 
 ## API 域名
@@ -222,6 +235,18 @@ Authorization: Bearer YOUR_API_KEY
 - 中文 Note 节点，说明三个模型怎么选、All/VIP 的 prompt 比例兜底、真实尺寸控制和图片编辑/mask 用法。
 
 分享工作流前请清空 API Key。
+
+`example_workflow_gpt_image_2_5.json` 是独立的 2.5 示例：Flare 文生图 → Sunburst 编辑 → 预览。两处 API Key 均为空；运行整条链路会依次请求两款模型，各生成一张图片。默认 `1K + 1:1`、`quality=high`、超时 `600` 秒，并将 `retry_times=1` 以免演示时自动重复请求。需要最高档时手动改为 `max`。
+
+## 开发验证
+
+安装 `requirements.txt` 后运行：
+
+```bash
+python3 -m unittest discover -s tests -v
+```
+
+测试使用模拟接口，不调用收费服务，覆盖新模型与日期版本的请求字段、画质校验、多图/蒙版、图片解码和旧工作流兼容。实际 API 出图和完整 ComfyUI 界面仍需在对应环境验证。
 
 ## 常见问题
 

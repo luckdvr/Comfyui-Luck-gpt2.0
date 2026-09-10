@@ -6,7 +6,7 @@ Comfyui-Luck gpt-2.0 nodes for APIYi.
 The gpt-image-2-all API does not accept size, n, quality, or aspect_ratio.
 Composition controls are converted into a prompt prefix. APIYi documents
 gpt-image-2-vip size as currently disabled, so VIP also falls back to prompt
-ratio control. The official gpt-image-2 node exposes real size/quality/mask
+ratio control. The official gpt-image-2 / 2.5 node exposes real size/quality/mask
 controls.
 """
 
@@ -1143,9 +1143,17 @@ class ComfyuiLuckGPTImage2VipNode(ComfyuiLuckGPT20Node):
 
 
 class ComfyuiLuckGPTImage2Node:
-    """Official gpt-image-2 node with real size, quality, format, and mask controls."""
+    """GPT-Image 2 / 2.5 node with real size, quality, format, and mask controls."""
 
-    MODELS = ["gpt-image-2"]
+    # Keep the original model/default and widget order for saved workflows.
+    MODELS = [
+        "gpt-image-2",
+        "gpt-image-2.5-flare",
+        "gpt-image-2.5-sunburst",
+        "gpt-image-2.5-flare-2026-09-08",
+        "gpt-image-2.5-sunburst-2026-09-08",
+    ]
+    QUALITIES = ["auto", "low", "medium", "high", "xhigh", "max"]
     IMAGE_SIZES = [
         "auto (不传size)",
         "1K",
@@ -1183,12 +1191,18 @@ class ComfyuiLuckGPTImage2Node:
                 "api_key (API密钥)": ("STRING", {"default": "", "multiline": False}),
                 "prompt (提示词)": ("STRING", {"default": "", "multiline": True}),
                 "mode (模式)": (["AUTO", "text2img", "img2img"], {"default": "AUTO"}),
-                "model (模型)": (cls.MODELS, {"default": "gpt-image-2"}),
+                "model (模型)": (cls.MODELS, {
+                    "default": "gpt-image-2",
+                    "tooltip": "2.5-flare 速度优先；2.5-sunburst 画质与编辑精度优先。日期版本用于固定模型快照。",
+                }),
                 "api_base (接口域名)": (API_BASE_URLS, {"default": DEFAULT_API_BASE_URL}),
                 "image_size (分辨率)": (cls.IMAGE_SIZES, {"default": "2K"}),
                 "aspect_ratio (宽高比)": (cls.ASPECT_RATIOS, {"default": "16:9"}),
                 "custom_size (仅custom填写: 宽x高)": ("STRING", {"default": "1600x1200", "multiline": False}),
-                "quality (画质)": (["auto", "low", "medium", "high"], {"default": "auto"}),
+                "quality (画质)": (cls.QUALITIES, {
+                    "default": "auto",
+                    "tooltip": "xhigh / max 仅限 2.5。按 API易实测输出 token 量，2.5 high 对应旧版 medium，2.5 max 对应旧版 high。auto 的费用和耗时可能变化，建议明确选档。",
+                }),
                 "output_format (输出格式)": (["png", "jpeg", "webp"], {"default": "png"}),
                 "output_compression (压缩率)": ("INT", {"default": 85, "min": 0, "max": 100}),
                 "seed (种子)": (
@@ -1231,6 +1245,15 @@ class ComfyuiLuckGPTImage2Node:
         return image_payloads
 
     def _payload_fields(self, model, prompt, size, quality, output_format, output_compression):
+        if model not in self.MODELS:
+            raise ValueError(f"不支持的图像模型: {model}，请从 model 下拉框选择")
+        if quality not in self.QUALITIES:
+            raise ValueError(f"不支持的 quality: {quality}，可选值: {', '.join(self.QUALITIES)}")
+        if model == "gpt-image-2" and quality in ("xhigh", "max"):
+            raise ValueError(
+                f"gpt-image-2 不支持 quality={quality}；请改用 gpt-image-2.5-flare / "
+                "gpt-image-2.5-sunburst，或将 quality 改为 auto / low / medium / high"
+            )
         fields = {
             "model": model,
             "prompt": prompt,
@@ -1312,8 +1335,9 @@ class ComfyuiLuckGPTImage2Node:
             and model.startswith("http")
         ):
             # Old workflows can shift widget values after converting prompt to
-            # an input. Recover the intended gpt-image-2 settings instead of
+            # an input. Recover the intended model and settings instead of
             # sending model=https://... or size=16:9 to the API.
+            shifted_model = mode
             shifted_api_base = model
             shifted_image_size = api_base
             shifted_aspect_ratio = image_size
@@ -1323,7 +1347,7 @@ class ComfyuiLuckGPTImage2Node:
             shifted_output_compression = kwargs.get("output_format (输出格式)", 85)
 
             mode = "AUTO"
-            model = "gpt-image-2"
+            model = shifted_model
             api_base = shifted_api_base.rstrip("/")
             image_size = shifted_image_size
             aspect_ratio = shifted_aspect_ratio
@@ -1333,7 +1357,7 @@ class ComfyuiLuckGPTImage2Node:
             kwargs["output_compression (压缩率)"] = shifted_output_compression
             kwargs["timeout_seconds (超时秒数)"] = 600
 
-        quality = safe_choice(kwargs.get("quality (画质)", "auto"), ["auto", "low", "medium", "high"], "auto")
+        quality = kwargs.get("quality (画质)", "auto")
         output_format = safe_choice(kwargs.get("output_format (输出格式)", "png"), ["png", "jpeg", "webp"], "png")
         output_compression = safe_int(kwargs.get("output_compression (压缩率)", 85), 85, 0, 100)
         seed = safe_int(kwargs.get("seed (种子)", 0), 0, 0, 2147483647)
@@ -1351,6 +1375,15 @@ class ComfyuiLuckGPTImage2Node:
             raise ValueError("prompt 不能为空")
 
         effective_size = normalize_size(image_size, aspect_ratio, custom_size)
+        # Validate model/quality before encoding images or sending a request.
+        fields = self._payload_fields(
+            model,
+            clean_prompt,
+            effective_size,
+            quality,
+            output_format,
+            output_compression,
+        )
         image_payloads = self._collect_images(kwargs)
         mask_bytes = mask_to_png_bytes(kwargs.get("mask"))
 
@@ -1366,14 +1399,6 @@ class ComfyuiLuckGPTImage2Node:
             raise ValueError("mask 只能和 image_01 一起用于图片编辑")
 
         headers = {"Authorization": f"Bearer {api_key.strip()}"}
-        fields = self._payload_fields(
-            model,
-            clean_prompt,
-            effective_size,
-            quality,
-            output_format,
-            output_compression,
-        )
 
         print(f"[Comfyui-Luck gpt-image-2] 使用 seed: {seed} (not sent to API)")
         print(f"[Comfyui-Luck gpt-image-2] mode={actual_mode}, api_base={api_base}, image_size={image_size}, aspect_ratio={aspect_ratio}, quality={quality}, timeout={timeout_seconds}s, retry={retry_times}, fields={fields}")
@@ -1449,7 +1474,7 @@ class ComfyuiLuckGPTImage2Node:
                     "output_images": int(image_tensor.shape[0]),
                     "usage": data.get("usage"),
                     "seed": seed,
-                    "seed_note": "seed is a ComfyUI control only and is not sent to gpt-image-2",
+                    "seed_note": "seed is a ComfyUI control only and is not sent to the image API",
                     "elapsed_seconds": round(elapsed, 2),
                 }
                 emit_runtime_status(

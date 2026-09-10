@@ -1,0 +1,220 @@
+{
+  "last_node_id": 5,
+  "last_link_id": 3,
+  "nodes": [
+    {
+      "id": 1,
+      "type": "ComfyuiLuckGPTImage2Node",
+      "pos": [
+        40,
+        220
+      ],
+      "size": [
+        520,
+        620
+      ],
+      "flags": {},
+      "order": 0,
+      "mode": 0,
+      "inputs": [],
+      "outputs": [
+        {
+          "name": "image",
+          "type": "IMAGE",
+          "links": [
+            1,
+            2
+          ],
+          "slot_index": 0
+        },
+        {
+          "name": "response",
+          "type": "STRING",
+          "links": null,
+          "slot_index": 1
+        }
+      ],
+      "properties": {
+        "Node name for S&R": "ComfyuiLuckGPTImage2Node"
+      },
+      "widgets_values": [
+        "",
+        "白色陶瓷马克杯放在浅灰桌面上，杯上写“清晨”，柔和自然光，产品摄影",
+        "text2img",
+        "gpt-image-2.5-flare",
+        "https://api.apiyi.com/v1",
+        "1K",
+        "1:1",
+        "1600x1200",
+        "high",
+        "png",
+        85,
+        0,
+        "randomize",
+        600,
+        1
+      ],
+      "title": "Flare · 文生图"
+    },
+    {
+      "id": 2,
+      "type": "PreviewImage",
+      "pos": [
+        640,
+        220
+      ],
+      "size": [
+        360,
+        360
+      ],
+      "flags": {},
+      "order": 1,
+      "mode": 0,
+      "inputs": [
+        {
+          "name": "images",
+          "type": "IMAGE",
+          "link": 1
+        }
+      ],
+      "outputs": [],
+      "properties": {},
+      "title": "Flare 生成结果"
+    },
+    {
+      "id": 3,
+      "type": "ComfyuiLuckGPTImage2Node",
+      "pos": [
+        1080,
+        220
+      ],
+      "size": [
+        520,
+        620
+      ],
+      "flags": {},
+      "order": 2,
+      "mode": 0,
+      "inputs": [
+        {
+          "name": "image_01",
+          "type": "IMAGE",
+          "link": 2
+        }
+      ],
+      "outputs": [
+        {
+          "name": "image",
+          "type": "IMAGE",
+          "links": [
+            3
+          ],
+          "slot_index": 0
+        },
+        {
+          "name": "response",
+          "type": "STRING",
+          "links": null,
+          "slot_index": 1
+        }
+      ],
+      "properties": {
+        "Node name for S&R": "ComfyuiLuckGPTImage2Node"
+      },
+      "widgets_values": [
+        "",
+        "保留图1杯子的形状、材质、位置和“清晨”文字，把背景改成窗边绿植，光线来自左侧",
+        "img2img",
+        "gpt-image-2.5-sunburst",
+        "https://api.apiyi.com/v1",
+        "1K",
+        "1:1",
+        "1600x1200",
+        "high",
+        "png",
+        85,
+        0,
+        "randomize",
+        600,
+        1
+      ],
+      "title": "Sunburst · 图片编辑"
+    },
+    {
+      "id": 4,
+      "type": "PreviewImage",
+      "pos": [
+        1680,
+        220
+      ],
+      "size": [
+        360,
+        360
+      ],
+      "flags": {},
+      "order": 3,
+      "mode": 0,
+      "inputs": [
+        {
+          "name": "images",
+          "type": "IMAGE",
+          "link": 3
+        }
+      ],
+      "outputs": [],
+      "properties": {},
+      "title": "Sunburst 编辑结果"
+    },
+    {
+      "id": 5,
+      "type": "Note",
+      "pos": [
+        40,
+        20
+      ],
+      "size": [
+        1500,
+        170
+      ],
+      "flags": {},
+      "order": 4,
+      "mode": 0,
+      "inputs": [],
+      "outputs": [],
+      "properties": {},
+      "widgets_values": [
+        "GPT-Image 2.5 示例：Flare 先出图，再把结果交给 Sunburst 编辑。两处都要填写 API Key，运行完整链路会生成两张图片、分别计费。\n默认 1K 方图、high 画质、600 秒超时、retry_times=1（不自动重试）。\nxhigh / max 仅适用于 2.5；按 API易实测输出 token 量，2.5 high 对应旧版 medium，2.5 max 对应旧版 high。\n需要固定版本时在 model 下拉框选择 2026-09-08 日期版本。原有节点名称和 ID 不变。分享前清空 API Key。"
+      ]
+    }
+  ],
+  "links": [
+    [
+      1,
+      1,
+      0,
+      2,
+      0,
+      "IMAGE"
+    ],
+    [
+      2,
+      1,
+      0,
+      3,
+      0,
+      "IMAGE"
+    ],
+    [
+      3,
+      3,
+      0,
+      4,
+      0,
+      "IMAGE"
+    ]
+  ],
+  "groups": [],
+  "config": {},
+  "extra": {},
+  "version": 0.4
+}
